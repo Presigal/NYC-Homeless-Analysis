@@ -1,0 +1,84 @@
+This dataset sheds light on homelessness statistics in NYC
+source: https://catalog.data.gov/dataset/dhs-data-dashboard
+
+Acronym guide
+FWC -> Families with children
+AF -> Adult Families
+SA -> Single Adults
+HoH -> Head of Household
+Avg.Daily.Census -> average number of people in the shelter per day
+
+
+1] "Report.Date"  -> time series object
+
+How many individuals are in a shelter (at a given timestamp)
+[2] "FWC.Avg.Daily.census.Individual.in.Shelter...Adults"
+
+How many children are in a shelter (at a given timestamp)
+ [3] "FWC.Avg.Daily.census.Individual.in.Shelter...Children"
+
+Both Combined                                       
+[4] "FWC.Avg.Daily.census.Individual.in.Shelter...Total"                                          
+[5] "AF.Avg.Daily.census.Individual.in.Shelter...Adults"                                          
+[6] "SA.Avg.Daily.census.Individual.in.Shelter...Men"                                             
+[7] "SA.Avg.Daily.census.Individual.in.Shelter...Women"                                           
+[8] "SA.Avg.Daily.census.Individual.in.Shelter...Total"
+
+                                           
+ [9] "FWC.Unique.Individuals.by.Age...0.thru.5"                                                    
+[10] "FWC.Unique.Individuals.by.Age...6.thru.13"                                                   
+[11] "FWC.Unique.Individuals.by.Age...14.thru.17"                                                  
+[12] "FWC..Unique.Individuals.by.Age..18.thru.20"                                                  
+[13] "FWC.Unique.Individuals.by.Age...21.thru.29"                                                  
+[14] "FWC.Unique.Individuals.by.Age...30.thru.44"                                                  
+[15] "FWC.Unique.Individuals.by.Age...45.thru.64"                                                  
+[16] "FWC.Unique.Individuals.by.Age...65.and.above"                                                
+[17] "FWC.Unique.Individuals.by.Age...Total"
+
+                                                       
+[18] "AF.Unique.Individuals.by.Age...18.thru.20"                                                   
+[19] "AF.Unique.Individuals.by.Age...21.thru.29"                                                   
+[20] "AF.Unique.Individuals.by.Age...30.thru.44"                                                   
+[21] "AF.Unique.Individuals.by.Age...45.thru.64"                                                   
+[22] "AF.Unique.Individuals.by.Age...65.and.above"                                                 
+[23] "AF.Unique.Individuals.by.Age...Total"                                                        
+[24] "SA.Unique.Individuals.by.Age...18.thru.29"                                                   
+[25] "SA.Unique.Individuals.by.Age...30.thru.44"                                                   
+[26] "SA.Unique.Individuals.by.Age...45.thru.64"                                                   
+[27] "SA.Unique.Individuals.by.Age...65.and.above"                                                 
+[28] "SA.Unique.Individuals.by.Age...Total"
+
+
+Homeless breakdown by ethnicity
+[29] "FWC.Race.Ethnicity.HoH...Asian.Pacific.Islander"                                             
+[30] "FWC.Race.Ethnicity.HoH...Black.non.Hispanic"
+[31] "FWC.Race.Ethnicity.HoH...Hispanic"
+[32] "FWC.Race.Ethnicity.HoH...Native.American"
+[33] "FWC.Race.Ethnicity.HoH...White.non.Hispanic"
+[34] "FWC.Race.Ethnicity.HoH...Unknown"
+[35] "FWC.Race.Ethnicity.HoH...Total.Heads.of.Households"
+[36] "AF.Race.Ethnicity.HoH...Asian.Pacific.Islander"
+[37] "AF.Race.Ethnicity.HoH...Black.non.Hispanic"
+[38] "AF.Race.Ethnicity.HoH...Hispanic"
+[39] "AF.Race.Ethnicity.HoH...Native.American"                                                     
+[40] "AF.Race.Ethnicity.HoH...White.non.Hispanic"                                                  
+[41] "AF.Race.Ethnicity.HoH...Unknown"
+[42] "AF.Race.Ethnicity.HoH...Total.Heads.of.Households"                                           
+[43] "SA.Race.Ethnicity.HoH...Asian.Pacific.Islander"                                              
+[44] "SA.Race.Ethnicity.HoH...Black.non.Hispanic"                                                  
+[45] "SA.Race.Ethnicity.HoH...Hispanic"                                                            
+[46] "SA.Race.Ethnicity.HoH...Native.American"                                                     
+[47] "SA.Race.Ethnicity.HoH...White.non.Hispanic"                                                  
+[48] "SA.Race.Ethnicity.HoH...Unknown"                                                             
+[49] "SA.Race.Ethnicity.HoH...Total.Individuals"
+
+
+[50] "FWC...Number.of.School.Aged.Children"                                                        
+[51] "FWC...Average.School.Attendance.Rate"                                                        
+[52] "FWC...Percent.of.families.successfully.placed.by.youngest.school.aged.child.s.school.address"
+[53] "HOME.STAT.clients.placed.into.permanent.housing..transitional.housing..and.other.settings"   
+[54] "Total.Homebase.Enrollments"                                                                  
+[55] "fwc_total_shelter_placements"                    
+[56] "af_total_shelter_placements"                                                                 
+[57] "sa_total_shelter_placements"                                                                 
+[58] "sa_shelter_exits_into_supportive_housing"    

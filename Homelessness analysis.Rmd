@@ -1,0 +1,1008 @@
+---
+title: "HomelessAnalysis"
+author: "AlejandroCespedesFernandez"
+date: "2026-02-16"
+output:
+  pdf_document: default
+colorlinks: true
+urlcolor: blue
+linkcolor: blue
+citecolor: blue
+toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+For this analysis, we are going to be using the following data from the DHS collected from homeless shelters in NYC from July 2015 to March 2025. At the time of writing this article, this dataset was last updated on August 3rd, 2025.
+source: https://catalog.data.gov/dataset/dhs-data-dashboard
+
+This data set is about the total amount of homeless people held in shelters at the time of the census. This dataset breaks down the population by age, ethnicity, and gender. For the final columns, there are the "shelters placed" 
+
+There are a lot of features in this data set, here is a deconstruction of the different variable names:
+
++ FWC -> Families with Children
++ AF -> Adult Families
++ SA -> Single Adults
++ HoH -> Head of Households
+
+### *NOTE TO READER*
+This data set changed halfway into 2022 its reporting frequency to be more frequent. To better explain the data, I decided to only keep the tail end of the data collected that month.  
+
+```{r, echo=FALSE, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(lubridate) #to handle time series data
+```
+
+
+```{r, include=FALSE}
+dir = "C:/Users/alexc/OneDrive/Documents/JournalistDatasets/Homeless/"
+setwd(paste(dir))
+```
+
+```{r, echo=FALSE, include=FALSE}
+data = read.csv(paste0(dir, "DHS_Data_Dashboard.csv"), sep=",", header=TRUE)
+head(data)
+```
+
+```{r, echo=FALSE, include=FALSE}
+colnames(data)
+```
+
+
+```{r}
+paste("The amount of data points we have for this data set is: ", length(data[,1]))
+```
+
+```{r, echo=FALSE, include=FALSE}
+#This dataset's timeline is discontinuous, so that needs to be fixed before we continue:
+data$Report.Date <- as.Date(data$Report.Date, format = "%m/%d/%Y")
+
+data <- data %>%
+  arrange(Report.Date)
+```
+
+```{r, echo=FALSE, include=FALSE}
+#double checking for sanity
+print(data$Report.Date)
+```
+
+
+
+# Data Exploration
+
+This data set mainly separates groups of people by age and race by the aforementioned categories: FWC,AF, and SA. There is a special category for school children, which can really only be applied for families with children. 
+
+Finally, we have some total shelter placements for the aforementioned groups. 
+
+## Breakdown by Age
+
+### Population Breakdown
+
+Below is a graph that represents proportions per category of group.
+
+```{r,  echo=FALSE}
+agg_long <- data %>%
+  select(
+    Report.Date,
+    `FWC.Avg.Daily.census.Individual.in.Shelter...Total`,
+    AF.Avg.Daily.census.Individual.in.Shelter...Adults,
+    `SA.Avg.Daily.census.Individual.in.Shelter...Total`
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  ) %>%
+  mutate(
+    group = recode(
+      group,
+          `FWC.Avg.Daily.census.Individual.in.Shelter...Total` ="Families With Children",
+          `AF.Avg.Daily.census.Individual.in.Shelter...Adults`= "Adult Families",
+          `SA.Avg.Daily.census.Individual.in.Shelter...Total` = "Single Adults"
+    )
+  )
+
+# keep latest per date/group (same as before)
+agg_clean <- agg_long %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%
+  ungroup()
+
+# components = all three groups
+agg_components <- agg_clean %>%
+  mutate(group = factor(
+    group,
+    levels = c("Families With Children", "Adult Families", "Single Adults")
+  ))
+
+# total = sum across groups per date
+agg_total <- agg_components %>%
+  group_by(Report.Date) %>%
+  summarise(count = sum(count, na.rm = TRUE), .groups = "drop")
+
+ggplot() +
+  geom_area(
+    data = agg_components,
+    aes(Report.Date, count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = agg_total,
+    aes(Report.Date, count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+```
+
+
+### Families with Children by category (Adult, and Children)
+
+```{r,  echo=FALSE}
+fwc_long <- data %>%
+  select(
+    Report.Date,
+    `FWC.Avg.Daily.census.Individual.in.Shelter...Adults`,
+    `FWC.Avg.Daily.census.Individual.in.Shelter...Children`,
+    `FWC.Avg.Daily.census.Individual.in.Shelter...Total`
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  )
+
+fwc_long$group <- recode(
+  fwc_long$group,
+  `FWC.Avg.Daily.census.Individual.in.Shelter...Adults` = "Adults",
+  `FWC.Avg.Daily.census.Individual.in.Shelter...Children` = "Children",
+  `FWC.Avg.Daily.census.Individual.in.Shelter...Total` = "Total"
+  
+)
+
+fwc_clean <- fwc_long %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%   # keep latest entry for that date
+  ungroup()
+
+
+
+# separate total from components
+fwc_components <- fwc_clean %>%
+  filter(group != "Total")
+
+fwc_total <- fwc_clean %>%
+  filter(group == "Total")
+
+ggplot() +
+  geom_area(
+    data = fwc_components,
+    aes(x = Report.Date, y = count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = fwc_total,
+    aes(x = Report.Date, y = count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+
+fwc_components$group <- factor(
+  fwc_components$group,
+  levels = c("Children", "Adults", "Total")
+)
+```
+There are a couple of interesting movements in this graph. First, it is obviously not a stationary graph. Second, note that the scale of this graph does not start at 0, so the scale of this graph is less dramatic as depicted. 
+
+The first thing that jumps out of you on this graph is the decrease in homelessness in 2020, followed by an increase___Homelessness going down in 2020 makes sense, as that is when the 2020 pandemic happened. This unfortunately is probably correlated with [the increased rate of homelessness](https://www.coalitionforthehomeless.org/wp-content/uploads/2020/06/COVID19HomelessnessReportJune2020.pdf) that was seen in New York. The hyperlink discusses the mortality rate of covid-19 around April-May 2020, which lines up around the time of the graph. The numbers do not quite match up though, and the death of homeless persons was 22 (READ THE PAPER TO ELABORATE ON THIS) 
+
+Another feature of this graph is the appearance of a type of seasonality that appears before the covid-19 pandemic. Unfortunately, this is linked with the fact that [families face an increased cost of caring for their children](https://www.familypromisece.org/post/why-family-homelessness-increases-during-the-summer-months), along with other costs such as increased electrical bills and the loss of support from when children are attending school. The seasonality argument is supported by the graph, as we see the seasonal affects of the main graph affect the children population a lot more than the adult population. 
+
+```{r,  echo=FALSE}
+
+ggplot(fwc_clean, aes(x = group, y = count, fill = group)) +
+  geom_boxplot() +
+  theme_minimal()
+```
+An alternate view of the stacked graph above. We can see that in families, children are more likely to end up homeless than adults. However, children are being more represented in this data just because families tend to have more than one child, and usually, the core family includes at most two people, the mother and the father.
+
+### Families with Children by Age
+
+```{r,  echo=FALSE}
+
+fwc_long_agerange <- data %>%
+  select(
+    Report.Date,
+    `FWC.Unique.Individuals.by.Age...0.thru.5`,
+    `FWC.Unique.Individuals.by.Age...6.thru.13`,
+    `FWC.Unique.Individuals.by.Age...14.thru.17`,
+    `FWC..Unique.Individuals.by.Age..18.thru.20`,
+    `FWC.Unique.Individuals.by.Age...21.thru.29`,
+    `FWC.Unique.Individuals.by.Age...30.thru.44`,
+    `FWC.Unique.Individuals.by.Age...45.thru.64`,
+    `FWC.Unique.Individuals.by.Age...65.and.above`,
+    `FWC.Unique.Individuals.by.Age...Total`
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  )
+
+fwc_long_agerange$group <- recode(
+  fwc_long_agerange$group,
+  `FWC.Unique.Individuals.by.Age...0.thru.5` = "0-5",
+  `FWC.Unique.Individuals.by.Age...6.thru.13` = "6-13",
+  `FWC.Unique.Individuals.by.Age...14.thru.17` = "14-17",
+  `FWC..Unique.Individuals.by.Age..18.thru.20` = "18-20",
+  `FWC.Unique.Individuals.by.Age...21.thru.29` = "21-29",
+  `FWC.Unique.Individuals.by.Age...30.thru.44` = "30-44",
+  `FWC.Unique.Individuals.by.Age...45.thru.64` = "45-64",
+  `FWC.Unique.Individuals.by.Age...65.and.above` = "65+",
+  `FWC.Unique.Individuals.by.Age...Total` = "Total"
+  
+)
+
+fwc_clean_agerange <- fwc_long_agerange %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%   # keep latest entry for that date
+  ungroup()
+
+
+
+# separate total from components
+fwc_components <- fwc_clean_agerange %>%
+  filter(group != "Total") %>%
+  mutate(group = factor(group, levels = c("0-5","6-13","14-17","18-20","21-29","30-44","45-64","65+")))
+
+fwc_total <- fwc_clean_agerange %>%
+  filter(group == "Total")
+
+ggplot() +
+  geom_area(
+    data = fwc_components,
+    aes(x = Report.Date, y = count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = fwc_total,
+    aes(x = Report.Date, y = count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+
+fwc_components$group <- factor(
+  fwc_components$group,
+  levels = c("0-5","6-13","14-17","18-20","21-29","30-44","45-64","65+")
+)
+
+```
+
+Breaking down the Families with Children demographics, we can see a breakdown of the majorities. Children aged 0-13 make up a huge chunk of homeless families. Reporting fell after 2020 with COVID, but soon shot up right after. This rapid increase in the homeless population can be attributed to the [influx of asylum seekers that have come to the USA](https://harris.uchicago.edu/news-events/news/new-research-shows-60-historic-homelessness-increase-prompted-immigration-policy). According to the source, that only accounts for 60% percent of the rise. The other 40%, remains unexplained. 
+
+However, if I were to interject, housing prices [inflated at a whopping ~7% in 2022](https://www.in2013dollars.com/Housing/price-inflation). We can make a reasonable guess that since wages didn't keep up with this inflation, unfortunately a lot of people were not able to afford their homes.
+
+```{r,  echo=FALSE}
+ggplot(
+  fwc_components,
+  aes(x = group, y = count, fill = group)
+) +
+  geom_boxplot() +
+  theme_minimal()
+```
+When we break it down by age, we can see that children make up a big part of the population when it comes to families with children. This is obvious, of course, but something we see is the second most prevalent age range, which is 21-29 and 30-44. Here, we can assume that these are the age of the parents. Then we see drop offs with 14-17, 18-20. Only assuming here, but based on the previous citation of needing assistance during the school year, it is likely at these ages, these groups are either helping the family with working on the side, or do not need as much financial assistance.
+
+### Adult Families by Age
+
+```{r,  echo=FALSE}
+#Reminder AF -> Adult Families
+af_long_age <- data %>%
+  select(
+    Report.Date,
+    `AF.Unique.Individuals.by.Age...18.thru.20`,
+    `AF.Unique.Individuals.by.Age...21.thru.29`,
+    `AF.Unique.Individuals.by.Age...30.thru.44`,
+    `AF.Unique.Individuals.by.Age...45.thru.64`,
+    `AF.Unique.Individuals.by.Age...65.and.above`,
+    `AF.Unique.Individuals.by.Age...Total`,
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  )
+
+af_long_age$group <- recode(
+  af_long_age$group,
+    `AF.Unique.Individuals.by.Age...18.thru.20` = "18-20",
+    `AF.Unique.Individuals.by.Age...21.thru.29` = "21-29",
+    `AF.Unique.Individuals.by.Age...30.thru.44` = "30-44",
+    `AF.Unique.Individuals.by.Age...45.thru.64` = "45-64",
+    `AF.Unique.Individuals.by.Age...65.and.above` = "65+",
+    `AF.Unique.Individuals.by.Age...Total` = "Total",
+  
+)
+
+af_clean_age <- af_long_age %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%   # keep latest entry for that date
+  ungroup()
+
+
+
+# separate total from components
+af_age_components <- af_clean_age %>%
+  filter(group != "Total")
+
+af_age_total <- af_clean_age %>%
+  filter(group == "Total")
+
+ggplot() +
+  geom_area(
+    data = af_age_components,
+    aes(x = Report.Date, y = count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = af_age_total,
+    aes(x = Report.Date, y = count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+
+af_age_components$group <- factor(
+  af_age_components$group,
+  levels = c("18-20","21-29","30-44","45-64","65+")
+)
+```
+This graph shows the age range of Adult Families. We can see that a big chunk of the graph is made up of older generations, namely 45-64, and a follow-up of 30-44. We see a huge spike after 2022. This spike was also because of the spike in housing prices. 
+
+```{r,  echo=FALSE}
+ggplot(
+  af_age_components %>% filter(group != "Total"),
+  aes(x = group, y = count, fill = group)
+) +
+  geom_boxplot() +
+  theme_minimal()
+```
+Here, the graphs reflect the volumes discussed with the previous graph. Adult families usually consist of caretakers taking care of dependents. From this graph, the majority of the concentration from the homeless population is 21-64, leaning towards 45-64. This is most likely because this is when people are independent, and have the least supports available to them. 
+
+### Single Adults by Age
+
+```{r,  echo=FALSE}
+#SA -> Single Adults
+sa_long_age <- data %>%
+  select(
+    Report.Date,
+    `SA.Unique.Individuals.by.Age...18.thru.29`,
+    `SA.Unique.Individuals.by.Age...30.thru.44`,
+    `SA.Unique.Individuals.by.Age...45.thru.64`,
+    `SA.Unique.Individuals.by.Age...65.and.above`,
+    `SA.Unique.Individuals.by.Age...Total`,
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  )
+
+sa_long_age$group <- recode(
+  sa_long_age$group,
+    `SA.Unique.Individuals.by.Age...18.thru.29` = "18-29",
+    `SA.Unique.Individuals.by.Age...30.thru.44` = "30-44",
+    `SA.Unique.Individuals.by.Age...45.thru.64` = "45-64",
+    `SA.Unique.Individuals.by.Age...65.and.above`="65+",
+    `SA.Unique.Individuals.by.Age...Total`="Total",
+  
+)
+
+sa_clean_age <- sa_long_age %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%   # keep latest entry for that date
+  ungroup()
+
+
+
+# separate total from components
+sa_components <- sa_long_age %>%
+  filter(group != "Total")
+
+sa_total <- sa_long_age %>%
+  filter(group == "Total")
+
+ggplot() +
+  geom_area(
+    data = sa_components,
+    aes(x = Report.Date, y = count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = sa_total,
+    aes(x = Report.Date, y = count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+
+sa_components$group <- factor(
+  sa_components$group,
+  levels = c("18-20","21-29","30-44","45-64","65+")
+)
+```
+interesting notes: This didn't go down as far as the family graphs
+In fact, this graph reinforces the central thesis of the article that families were more likely to get help during the pandemic (citation needed!), while single adults were less likely to get help. 
+
+The graph for single adults has an interesting change compared to the other graphs, the displacement during covid was not as severe. Some theories that could potentially affect this less aggressive reduction is that single adults were less likely to receive financial aid during COVID, so their living situation was unlikely to have changed as much. This also means that when COVID assistance ended, single adults were not affected as much. It is also the fact that single adults are more likely to find housing, and can make do with smaller or less desirable accommodations. 
+
+
+```{r,  echo=FALSE}
+ggplot(
+  sa_clean_age %>% filter(group != "Total"),
+  aes(x = group, y = count, fill = group)
+) +
+  geom_boxplot() +
+  theme_minimal()
+```
+When we see the breakdown by age, what is interesting is that a really big chunk of the population has steadily been the group 45-64. while the age groups 18-29 and 30-44 have more variance between them. In other words, younger groups are more likely to enter and leave homelessness, while those 45-64 are more likely to be permanently homelessness, or at least for a much longer time.
+
+According to [the journal of The National Library of Medicine](https://www.ncbi.nlm.nih.gov/books/NBK606571/), this age group is the most vulnerable because of medical conditions that are harder to recover from. From the article, 
+
+```
+Older adults with earlier experiences of homelessness have more adverse childhood experiences, chronic medical conditions, drug use, and out-of-home placement during childhood; more mental health, alcohol and drug use, and incarceration during young adulthood; and more underemployment, drug use, and traumatic brain injury during middle adulthood (Brown et al., 2016).
+```
+
+In other words, people who start off disadvantaged unfortunately stay disadvantaged. From that same article, it is also reported that payments from the government, namely SSI and SSDI payments, are not enough to pay rent. So after being overburdened, they are often left with no recourse and end up homeless. 
+
+*****
+
+## Breakdown by Ethinicity
+
+In the section before, we were breaking the data down by age. The dataset also provides a breakdown of homelessness statistics by ethnicity. 
+
+```{r,  echo=FALSE}
+#Families with children based on race
+ fwc_long_eth <- data %>%
+  select(
+    Report.Date,
+    `FWC.Race.Ethnicity.HoH...Asian.Pacific.Islander`,
+    `FWC.Race.Ethnicity.HoH...Black.non.Hispanic`,
+    `FWC.Race.Ethnicity.HoH...Hispanic`,
+    `FWC.Race.Ethnicity.HoH...Native.American`,
+    `FWC.Race.Ethnicity.HoH...White.non.Hispanic`,
+    `FWC.Race.Ethnicity.HoH...Unknown`,
+    `FWC.Race.Ethnicity.HoH...Total.Heads.of.Households`
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  )
+
+fwc_long_eth$group <- recode(
+  fwc_long_eth$group,
+    `FWC.Race.Ethnicity.HoH...Asian.Pacific.Islander` = "Asian Pacific Islander",
+    `FWC.Race.Ethnicity.HoH...Black.non.Hispanic` = "Black Non-Hispanic",
+    `FWC.Race.Ethnicity.HoH...Hispanic` = "Hispanic",
+    `FWC.Race.Ethnicity.HoH...Native.American` = "Native American",
+    `FWC.Race.Ethnicity.HoH...White.non.Hispanic` = "White Non-Hispanic",
+    `FWC.Race.Ethnicity.HoH...Unknown`= "Unknown",
+    `FWC.Race.Ethnicity.HoH...Total.Heads.of.Households` = "Total"
+  
+)
+
+fwc_clean_eth <- fwc_long_eth %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%   # keep latest entry for that date
+  ungroup()
+
+
+
+# separate total from components
+fwc_eth_components <- fwc_clean_eth %>%
+  filter(group != "Total")
+
+fwc_eth_total <- fwc_clean_eth %>%
+  filter(group == "Total")
+
+ggplot() +
+  geom_area(
+    data = fwc_eth_components,
+    aes(x = Report.Date, y = count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = fwc_eth_total,
+    aes(x = Report.Date, y = count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+
+fwc_eth_components$group <- factor(
+  fwc_eth_components$group,
+  levels = c("Asian Pacific Islander","Black Non-Hispanic","Hispanic","Native American","White Non-Hispanic","Unknown")
+)
+
+
+```
+This graph paints a clear picture towards structural inequality, with a shock in 2022. I would like to discuss the shock in the Hispanic population first. This shock first comes from the migration surge that New York City experienced in 2022, leading to many immigrants not being able to find housing in the city. If anyone remembers during that time, New York City had to set up [tents to accomodate all of the new migrants](https://www.youtube.com/watch?v=hJV05u11upA). The sudden shock from Hispanic migrants seems to be slightly decreasing, but if we were to apply a time series regression to this model, we can most likely conclude this shock is permanent. 
+
+Some other things to note how low the white population is compared to the other ethnicity, it does not seem to match the proportions of New York City at all. This is a strong indicator of some kind of skew, namely structural inequality. However, I feel the following boxplot portrays this much better, so I will go into detail there. 
+
+```{r,  echo=FALSE}
+ggplot(
+  fwc_clean_eth %>% filter(group != "Total"),
+  aes(x = group, y = count, fill = group)
+) +
+  geom_boxplot() +
+  theme_minimal()
+```
+Here we can see that there is a clear disparity between the different ethnicities of New York City. [In this paper from Molly K. Richard](https://academic.oup.com/socpro/advance-article/doi/10.1093/socpro/spaf044/8257659), structural racism is the culprit behind these huge disparities. I don't want to dive into this topic too much in this paper, as this is beyond my scope, but basically structural racism is defined as leftovers left from racist periods in a country's history that still leave lasting effects to this day. 
+
+This paper goes into a couple of reasons. The biggest structural challenge towards Black and Hispanic populations is rent. More specifically, it seems there might be a relationship between homelessness and low vacancy rates. In other words, how available is housing? Recently, New York City has been building lots of luxury apartments, but barely anything for middle and lower class residents. What is completely outraging is that many of these apartments are not even being used as residencies, [but as an investment](https://www.msn.com/en-us/money/realestate/the-abandoned-nyc-skyscrapers-where-the-ultra-rich-park-their-money/ar-AA1WUiAz). 
+
+Moreover, in the paper it is stated that Black and Hispanic people tend to face discrimination when searching for housing, which in turn keeps reinforcing the negative feedback loop. This feedback loop keeps Black and Hispanic people in poverty. Another feedback loop is criminalization. As stated before when discussing age brackets, those who have been incarcerated, especially at younger ages, tend to have fewer opportunities to leave that hole. 
+
+```{r,  echo=FALSE}
+ af_long_eth <- data %>%
+  select(
+    Report.Date,
+    `AF.Race.Ethnicity.HoH...Asian.Pacific.Islander`,
+    `AF.Race.Ethnicity.HoH...Black.non.Hispanic`,
+    `AF.Race.Ethnicity.HoH...Hispanic`,
+    `AF.Race.Ethnicity.HoH...Native.American`,
+    `AF.Race.Ethnicity.HoH...White.non.Hispanic`,
+    `AF.Race.Ethnicity.HoH...Unknown`,
+    `AF.Race.Ethnicity.HoH...Total.Heads.of.Households`
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  )
+
+af_long_eth$group <- recode(
+  fwc_long_eth$group,
+    `AF.Race.Ethnicity.HoH...Asian.Pacific.Islander` = "Asian Pacific Islander",
+    `AF.Race.Ethnicity.HoH...Black.non.Hispanic` = "Black Non-Hispanic",
+    `AF.Race.Ethnicity.HoH...Hispanic` = "Hispanic",
+    `AF.Race.Ethnicity.HoH...Native.American` = "Native American",
+    `AF.Race.Ethnicity.HoH...White.non.Hispanic` = "White Non-Hispanic",
+    `AF.Race.Ethnicity.HoH...Unknown`= "Unknown",
+    `AF.Race.Ethnicity.HoH...Total.Heads.of.Households` = "Total"
+  
+)
+
+af_clean_eth <- af_long_eth %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%   # keep latest entry for that date
+  ungroup()
+
+
+
+# separate total from components
+af_eth_components <- af_clean_eth %>%
+  filter(group != "Total")
+
+af_eth_total <- af_clean_eth %>%
+  filter(group == "Total")
+
+ggplot() +
+  geom_area(
+    data = af_eth_components,
+    aes(x = Report.Date, y = count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = af_eth_total,
+    aes(x = Report.Date, y = count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+
+af_eth_components$group <- factor(
+  af_eth_components$group,
+  levels = c("Asian Pacific Islander","Black Non-Hispanic","Hispanic","Native American","White Non-Hispanic","Unknown")
+)
+```
+
+The same pattern appears with adult families, not much more to say here, other than the same spoke appears with the spike in immigration New York (and by extension, the USA) experienced. 
+
+```{r,  echo=FALSE}
+ggplot(
+  af_clean_eth %>% filter(group != "Total"),
+  aes(x = group, y = count, fill = group)
+) +
+  geom_boxplot() +
+  theme_minimal()
+```
+
+Same pattern as with Adult families, although some key differences. We see the same heavy tail with the Hispanic population. This is most likely from the hispanic spike in immigration.
+
+Unlike the previous boxplot, here we see an increase in homelessness with white non-hispanic population. (why?)
+
+
+```{r,  echo=FALSE}
+#COME BACK TO THIS
+#Impute that missing value with the average of the values next to each other
+ sa_long_eth <- data %>%
+  select(
+    Report.Date,
+    `SA.Race.Ethnicity.HoH...Asian.Pacific.Islander`,
+    `SA.Race.Ethnicity.HoH...Black.non.Hispanic`,
+    `SA.Race.Ethnicity.HoH...Hispanic`,
+    `SA.Race.Ethnicity.HoH...Native.American`,
+    `SA.Race.Ethnicity.HoH...White.non.Hispanic`,
+    `SA.Race.Ethnicity.HoH...Unknown`,
+    `SA.Race.Ethnicity.HoH...Total.Individuals`
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  )
+
+sa_long_eth$group <- recode(
+  sa_long_eth$group,
+    `SA.Race.Ethnicity.HoH...Asian.Pacific.Islander` = "Asian Pacific Islander",
+    `SA.Race.Ethnicity.HoH...Black.non.Hispanic` = "Black Non-Hispanic",
+    `SA.Race.Ethnicity.HoH...Hispanic` = "Hispanic",
+    `SA.Race.Ethnicity.HoH...Native.American` = "Native American",
+    `SA.Race.Ethnicity.HoH...White.non.Hispanic` = "White Non-Hispanic",
+    `SA.Race.Ethnicity.HoH...Unknown`= "Unknown",
+    `SA.Race.Ethnicity.HoH...Total.Individuals` = "Total"
+  
+)
+
+sa_clean_eth <- sa_long_eth %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%   # keep latest entry for that date
+  ungroup()
+
+
+
+# separate total from components
+sa_eth_components <- sa_clean_eth %>%
+  filter(group != "Total")
+
+sa_eth_total <- sa_clean_eth %>%
+  filter(group == "Total")
+
+ggplot() +
+  geom_area(
+    data = sa_eth_components,
+    aes(x = Report.Date, y = count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = sa_eth_total,
+    aes(x = Report.Date, y = count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+
+sa_eth_components$group <- factor(
+  sa_eth_components$group,
+  levels = c("Asian Pacific Islander","Black Non-Hispanic","Hispanic","Native American","White Non-Hispanic","Unknown")
+)
+```
+
+```{r,  echo=FALSE}
+ggplot(
+  sa_clean_eth %>% filter(group != "Total"),
+  aes(x = group, y = count, fill = group)
+) +
+  geom_boxplot() +
+  theme_minimal()
+```
+Now this is different from the other box plots, the black non-hispanic group are way more likely to be homeless. We saw the same pattern somewhat emerging with the adult families box plot, but here it is a lot more pronounced. 
+
+(why?)
+
+### Gender Breakdown
+
+```{r,  echo=FALSE}
+sa_long_gdr <- data %>%
+  select(
+    Report.Date,
+    `SA.Avg.Daily.census.Individual.in.Shelter...Men`,
+    `SA.Avg.Daily.census.Individual.in.Shelter...Women`,
+    `SA.Avg.Daily.census.Individual.in.Shelter...Total`
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "count"
+  )
+
+sa_long_gdr$group <- recode(
+  sa_long_gdr$group,
+    `SA.Avg.Daily.census.Individual.in.Shelter...Men` = "Men",
+    `SA.Avg.Daily.census.Individual.in.Shelter...Women` = "Women",
+    `SA.Avg.Daily.census.Individual.in.Shelter...Total` = "Total"
+  
+)
+
+sa_clean_gdr <- sa_long_gdr %>%
+  group_by(Report.Date, group) %>%
+  slice_tail(n = 1) %>%   # keep latest entry for that date
+  ungroup()
+
+
+
+# separate total from components
+sa_gdr_components <- sa_clean_gdr %>%
+  filter(group != "Total")
+
+sa_gdr_total <- sa_clean_gdr %>%
+  filter(group == "Total")
+
+ggplot() +
+  geom_area(
+    data = sa_gdr_components,
+    aes(x = Report.Date, y = count, fill = group),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  geom_line(
+    data = sa_gdr_total,
+    aes(x = Report.Date, y = count),
+    color = "black",
+    linewidth = 1
+  ) +
+  theme_minimal()
+
+sa_gdr_components$group <- factor(
+  sa_gdr_components$group,
+  levels = c("Male", "Female")
+)
+```
+
+Straight away, there are some key insights we can take from this graph:
++ There are way more homeless men than there are women.
++ The male homeless population seems to be rising, while the population of women seems to be a lot more stable. 
+
+This could mean a couple things. The box plot below speaks more on this population difference, so I will leave that discussion for that. Here though, I want to discuss why the male population seems to be rising, and more prone to change. 
+
+The American Institute for Boys and Men released a [data breakdown](https://aibm.org/research/homelessness-in-the-united-states/) as to why homelessness is more likely to happen to men compared to women. For one, men are more likely to be single (or rather, have fewer social bonds) compared to women. Not to mention that when it comes to finding a shelter placement, women are also more likely to find shelter placements compared to men. Now, while there is an obvious gender gap in finding help, it does not mean that there is an implicit "unfair advantage." Women are more likely to face violence on the streets, so it makes sense that women would be more likely to be accepted into a shelter. 
+
+The disparity is also largely driven by veterans that are unable to return to daily life. Unfortunately, veterans in the United States are not given as much support as required for them to re-enter society. I would like to explore this angle further, but for the sake of staying on topic, I am going to continue keeping things brief. 
+
+For the dip during covid, its hard to say why that happened, and why it did not affect women so much. Most likely, it comes back from the idea brought up earlier from the source from AIBM: women tend to have more support from the government and informal social support networks as well. So, hypothetically, when the covid pandemic hit, women who would have been homeless without their support network would have been on the streets. Same with the rent spike, it is possible because of the stronger social connections, women were able to find places to live. These are just guesses off the top of my head though. 
+
+
+```{r,  echo=FALSE}
+ggplot(
+  sa_clean_gdr %>% filter(group != "Total"),
+  aes(x = group, y = count, fill = group)
+) +
+  geom_boxplot() +
+  theme_minimal()
+```
+The box plots explain the disparity well. Men have a more variable population in homelessness, while women is more steady, unusually so. The variance for men comes from the fact that the population of homeless men keeps increasing, while women stays constant.
+
+A reason for almost no homeless women could also be that first, this data set comes from Single Adults, not Adult Families or Families with Children. During the migration spike, it could be that the women that did come in were already in a family, therefore classified into a different category. From the same source of AIBM also states that women were more likely to be homeless if they were mothers, which sheds insight as to why they aren't in this category.
+
+### Homeless Shelter Placement Rates
+
+Homeless shelter placements can be characterized as housing placements after leaving the shelter. Instead of taking the raw numbers, I will instead be plotting and taking a look at the rate of placements, as this gives us better information as to what is happening. 
+
+```{r,  echo=FALSE}
+data <- data %>%
+  mutate(
+    fwc_rate =
+      fwc_total_shelter_placements /
+      `FWC.Avg.Daily.census.Individual.in.Shelter...Total`,
+
+    af_rate =
+      af_total_shelter_placements /
+      `AF.Avg.Daily.census.Individual.in.Shelter...Adults`,
+
+    sa_rate =
+      sa_total_shelter_placements /
+      `SA.Avg.Daily.census.Individual.in.Shelter...Total`
+  )
+
+rate_long <- data %>%
+  select(
+    Report.Date,
+    fwc_rate,
+    af_rate,
+    sa_rate
+  ) %>%
+  pivot_longer(
+    -Report.Date,
+    names_to = "group",
+    values_to = "rate"
+  )
+
+rate_long$group <- recode(
+  rate_long$group,
+  fwc_rate = "Families with Children",
+  af_rate  = "Adult Families",
+  sa_rate  = "Single Adults"
+)
+
+ggplot(rate_long, aes(Report.Date, rate, color = group)) +
+  geom_line() +
+  theme_minimal() +
+  labs(
+    title = "Shelter placement rate by population",
+    y = "Placement rate",
+    x = "Date"
+  )
+```
+
+A couple of things are strikingly obvious when looking at the chart, that is that single adults tend to have higher rates of being accepted than families with children or adult families. But before speaking about this, we should take a look at the actual percentage rates, which make the bigger story. Out of the whole homeless population in NYC, we don't see numbers higher than ~7%. This indicates that New York does not have nearly as much housing capacity for the homeless as needed. 
+
+Other observations that can be make in the graph is that Families with Children seems to be more stationary than adult family and single adult populations. Adult families is plausibly stationary from appearance alone, at least much more than single adults. From single adults, we can see a lot more fluctuation in the population of homeless single adults. For single adults, we see a sharp decrease in placements around the same time as the COVID-19 pandemic, and a steady rise as the years go on.
+
+Some guesses as to why single adults tend to be placed at higher rates compared to families could be that single adults tend to come in and out of homelessness, and are easier to accommodate than families. This isn't to say that single adults receive more help than families with children, 
+
+---
+
+# Regression Analysis
+
+For this section, I will be running a regressive model for purely analysis. I will not be removing any datapoints as they are all statistically significant in building our understanding. As such, these models will have heavy skews. My goal in this section is to explore the data, and seeing what are the most influential features in finding shelter placements. 
+
+For this regression, we will be applying a Possion regression. A Poisson is most appropriate, as we want to look at the rate of acceptance of homeless people into shelters 
+
+### Families with Children Regression Analysis
+
+In this block, we apply a regression on all the datapoints that involve families with children. The analysis will be below the plots.
+
+```{r}
+#regression based on shelter placements
+library(dplyr)
+
+fwc_reg <- data %>%
+  select(c("FWC.Avg.Daily.census.Individual.in.Shelter...Adults",
+            "FWC.Avg.Daily.census.Individual.in.Shelter...Children",
+            "FWC.Unique.Individuals.by.Age...0.thru.5",
+            "FWC.Unique.Individuals.by.Age...6.thru.13",
+            "FWC.Unique.Individuals.by.Age...14.thru.17",
+            "FWC..Unique.Individuals.by.Age..18.thru.20",
+            "FWC.Unique.Individuals.by.Age...21.thru.29",
+            "FWC.Unique.Individuals.by.Age...30.thru.44",
+            "FWC.Unique.Individuals.by.Age...45.thru.64",
+            "FWC.Unique.Individuals.by.Age...65.and.above",
+            "FWC.Race.Ethnicity.HoH...Asian.Pacific.Islander",
+            "FWC.Race.Ethnicity.HoH...Black.non.Hispanic",
+            "FWC.Race.Ethnicity.HoH...Hispanic",
+            "FWC.Race.Ethnicity.HoH...Native.American",
+            "FWC.Race.Ethnicity.HoH...White.non.Hispanic",
+            "FWC.Race.Ethnicity.HoH...Unknown",
+            "fwc_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "fwc_total_shelter_placements"
+
+predictors <- setdiff(names(fwc_reg), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_fwc <- glm(formula, data = fwc_reg, family="poisson")
+model_fwc
+```
+A couple of findings
++ A family is less likely to have a shelter placement based on whether they have children or not (WILL NEED CITATION)
++ Black and hispanic families are positively correlated with shelter placements
+
+```{r}
+anova(model_fwc, test = "Chisq")
+```
+Couple of findings:
+
+This model so far, will predict a negative value when 
+
+```{r}
+plot(model_fwc)
+
+#There is a large tail but otherwise normal. Probably the surge in 2022
+```
+
+```{r}
+summary(model_fwc)
+```
+```{r}
+library(car)
+vif(model_fwc)
+
+#Insane multicollinearity, but how to handle this within the parameters of the question trying to be asked?
+```
+
+```{r}
+pchisq(model_fwc$deviance,model_fwc$residual, lower.tail=FALSE)
+```
+PROJECT MODIFICATION IDEA
+
+FOR THIS PART, DO A RATE COMPARISON, USING THE ADULT AS THE BASELINE. MAKE TWO SEPERATE REGRESSIONS FOR RACE AND AGE.  
+
+```{r}
+library(glmnet)
+
+# Prepare matrices
+X <- model.matrix(formula, data = fwc_reg)[, -1]  # drop intercept
+y <- fwc_reg$fwc_total_shelter_placements
+
+# Cross-validated LASSO with Poisson family
+set.seed(42)
+cv_lasso <- cv.glmnet(X, y, family = "poisson", alpha = 1)
+
+# Best lambda
+plot(cv_lasso)
+best_lambda <- cv_lasso$lambda.min
+
+# Final model
+lasso_model <- glmnet(X, y, family = "poisson", 
+                      alpha = 1, lambda = best_lambda)
+coef(lasso_model)
+```
+```
+
+
+## Adult Families Regression Analysis
+
+```{r}
+af_reg <- data %>%
+  select(starts_with("AF"), fwc_total_shelter_placements) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  na.omit()
+
+target <- "af_total_shelter_placements"
+
+predictors <- setdiff(names(af_reg), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_af <- glm(formula, data = af_reg, family = "poisson")
+```
+
+```{r}
+plot(model_af)
+```
+
+## Single Adults Regression Analysis
+
+```{r}
+sa_reg <- data %>%
+  select(starts_with("SA"), sa_total_shelter_placements) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  na.omit()
+
+target <- "sa_total_shelter_placements"
+
+predictors <- setdiff(names(sa_reg), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_sa <- glm(formula, data = sa_reg, family = "poisson")
+```
+
+```{r}
+plot(model_sa)
+```
