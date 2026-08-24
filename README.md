@@ -1,7 +1,8 @@
 # 🏙️ NYC Homeless Shelter Analysis (2015–2025)
 
 **Author:** Alejandro Cespedes Fernandez  
-**Last Updated:** February 2026  
+**Last Updated:** August 2026
+**Initially Created:** February 2026  
 **Data Source:** [NYC DHS Data Dashboard](https://catalog.data.gov/dataset/dhs-data-dashboard)
 
 ---
