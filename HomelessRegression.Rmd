@@ -1,0 +1,155 @@
+---
+title: "HomelessRegression"
+author: "AlejandroCespedesFernandez"
+date: "2026-04-20"
+output:
+  pdf_document: default
+colorlinks: true
+urlcolor: blue
+linkcolor: blue
+citecolor: blue
+toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+For this analysis, we are going to be using the following data from the DHS collected from homeless shelters in NYC from July 2015 to March 2025. At the time of writing this article, this dataset was last updated on August 3rd, 2025.
+source: https://catalog.data.gov/dataset/dhs-data-dashboard
+
+This data set is about the total amount of homeless people held in shelters at the time of the census. This dataset breaks down the population by age, ethnicity, and gender. For the final columns, there are the "shelters placed" 
+
+There are a lot of features in this data set, here is a deconstruction of the different variable names:
+
++ FWC -> Families with Children
++ AF -> Adult Families
++ SA -> Single Adults
++ HoH -> Head of Households
+
+### *NOTE TO READER*
+This data set changed halfway into 2022 its reporting frequency to be more frequent. To better explain the data, I decided to only keep the tail end of the data collected that month.  
+
+```{r, echo=FALSE, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(lubridate) #to handle time series data
+```
+
+
+```{r, echo=FALSE, include=FALSE}
+data = read.csv("DHS_Data_Dashboard.csv", sep=",", header=TRUE)
+head(data)
+```
+
+```{r, echo=FALSE, include=FALSE}
+colnames(data)
+```
+
+
+```{r}
+paste("The amount of data points we have for this data set is: ", length(data[,1]))
+```
+
+```{r, echo=FALSE, include=FALSE}
+#This dataset's timeline is discontinuous, so that needs to be fixed before we continue:
+data$Report.Date <- as.Date(data$Report.Date, format = "%m/%d/%Y")
+
+data <- data %>%
+  arrange(Report.Date)
+```
+
+```{r, echo=FALSE, include=FALSE}
+#double checking for sanity
+print(data$Report.Date)
+```
+
+# Regression
+
+
+
+# Regression Analysis
+
+For this section, I will be running a regressive model for purely analysis. I will not be removing any datapoints as they are all statistically significant in building our understanding. As such, these models will have heavy skews. My goal in this section is to explore the data, and seeing what are the most influential features in finding shelter placements. 
+
+For this regression, we will be applying a Possion regression. A Poisson is most appropriate, as we want to look at the rate of acceptance of homeless people into shelters 
+
+### Families with Children Regression Analysis
+
+In this block, we apply a regression on all the datapoints that involve families with children. The analysis will be below the plots.
+
+##### Part 0: Preparing the data to be modeled
+
+There are a couple of things we should do before handling the data, and that is to first isolate each individual group, and then create two seperate features for the month and year. 
+
+```{r}
+data_feat <- data %>%
+  mutate(
+    year  = year(Report.Date),
+    month = factor(month(Report.Date))
+  )
+```
+
+
+```{r}
+#regression based on shelter placements
+library(dplyr)
+
+fwc_reg <- data_feat %>%
+  select(c("year", 
+           "month", 
+           "FWC.Avg.Daily.census.Individual.in.Shelter...Adults",
+            "FWC.Avg.Daily.census.Individual.in.Shelter...Children",
+            "FWC.Unique.Individuals.by.Age...0.thru.5",
+            "FWC.Unique.Individuals.by.Age...6.thru.13",
+            "FWC.Unique.Individuals.by.Age...14.thru.17",
+            "FWC..Unique.Individuals.by.Age..18.thru.20",
+            "FWC.Unique.Individuals.by.Age...21.thru.29",
+            "FWC.Unique.Individuals.by.Age...30.thru.44",
+            "FWC.Unique.Individuals.by.Age...45.thru.64",
+            "FWC.Unique.Individuals.by.Age...65.and.above",
+            "FWC.Race.Ethnicity.HoH...Asian.Pacific.Islander",
+            "FWC.Race.Ethnicity.HoH...Black.non.Hispanic",
+            "FWC.Race.Ethnicity.HoH...Hispanic",
+            "FWC.Race.Ethnicity.HoH...Native.American",
+            "FWC.Race.Ethnicity.HoH...White.non.Hispanic",
+            "FWC.Race.Ethnicity.HoH...Unknown",
+            "fwc_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "fwc_total_shelter_placements"
+
+predictors <- setdiff(names(fwc_reg), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_fwc <- glm(formula, data = fwc_reg, family="poisson")
+summary(model_fwc)
+```
+A couple of findings
++ A family is less likely to have a shelter placement based on whether they have children or not (WILL NEED CITATION)
++ Black and hispanic families are positively correlated with shelter placements
+
+```{r}
+anova(model_fwc, test = "Chisq")
+```
+Couple of findings:
+
+This model so far, will predict a negative value when 
+
+```{r}
+plot(model_fwc)
+
+#There is a large tail but otherwise normal. Probably the surge in 2022
+```
+
+```{r}
+library(car)
+vif(model_fwc)
+
+#Insane multicollinearity, but how to handle this within the parameters of the question trying to be asked?
+```

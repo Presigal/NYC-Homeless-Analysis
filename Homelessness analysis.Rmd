@@ -40,7 +40,7 @@ library(lubridate) #to handle time series data
 
 
 ```{r, include=FALSE}
-dir = "C:/Users/alexc/OneDrive/Documents/JournalistDatasets/Homeless/"
+dir = "C:/Users/alexc/OneDrive/Documents/JournalistDatasets/Homeless/NYC-Homeless-Analysis/"
 setwd(paste(dir))
 ```
 
@@ -635,7 +635,7 @@ ggplot(
 
 Same pattern as with Adult families, although some key differences. We see the same heavy tail with the Hispanic population. This is most likely from the hispanic spike in immigration.
 
-Unlike the previous boxplot, here we see an increase in homelessness with white non-hispanic population. (why?)
+Unlike the previous boxplot, here we see an increase in homelessness with white non-hispanic population.
 
 
 ```{r,  echo=FALSE}
@@ -716,7 +716,7 @@ ggplot(
 Now this is different from the other box plots, the black non-hispanic group are way more likely to be homeless. We saw the same pattern somewhat emerging with the adult families box plot, but here it is a lot more pronounced. 
 
 (why?)
-
+o
 ### Gender Breakdown
 
 ```{r,  echo=FALSE}
@@ -863,19 +863,95 @@ Some guesses as to why single adults tend to be placed at higher rates compared 
 
 For this section, I will be running a regressive model for purely analysis. I will not be removing any datapoints as they are all statistically significant in building our understanding. As such, these models will have heavy skews. My goal in this section is to explore the data, and seeing what are the most influential features in finding shelter placements. 
 
-For this regression, we will be applying a Possion regression. A Poisson is most appropriate, as we want to look at the rate of acceptance of homeless people into shelters 
+For this regression, we will be applying a Poisson regression. A Poisson is most appropriate, as we want to look at the rate of acceptance of homeless people into shelters 
 
 ### Families with Children Regression Analysis
 
-In this block, we apply a regression on all the datapoints that involve families with children. The analysis will be below the plots.
+In this block, we apply a regression on all the data points that involve families with children. The analysis will be below the plots.
+
+##### Part 0: Preparing the data to be modeled
+
+There are a couple of things we should do before handling the data, and that is to first isolate each individual group, and then create two seperate features for the month and year. 
+
+```{r, echo=FALSE}
+data_feat <- data %>%
+  mutate(
+    year  = year(Report.Date),
+    month = factor(month(Report.Date))
+  )
+```
+
+From here, we are going to individually analyze the demographics of ethnicity and age separately, as doing them together creates catastrophic VIF scores. 
+
+####### Control Group: Regression with Month only
+
+To begin, we are going to establish the A group of our experiment, which is purely doing a regression on our months. Here, we can also see the changes from January (our intercept), in other words, just how much seasonality our model has. 
 
 ```{r}
-#regression based on shelter placements
 library(dplyr)
 
-fwc_reg <- data %>%
-  select(c("FWC.Avg.Daily.census.Individual.in.Shelter...Adults",
-            "FWC.Avg.Daily.census.Individual.in.Shelter...Children",
+fwc_reg_months <- data_feat %>%
+  select(c("month",
+            "fwc_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "fwc_total_shelter_placements"
+
+predictors <- setdiff(names(fwc_reg_months), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_fwc_months <- glm(formula, data = fwc_reg_months, family="poisson")
+summary(model_fwc_months)
+```
+```{r, echo=FALSE}
+library(ggplot2)
+library(dplyr)
+
+# Build a coefficient summary with real month labels
+month_labels <- c("Jan","Feb","Mar","Apr","May","Jun",
+                   "Jul","Aug","Sep","Oct","Nov","Dec")
+
+coef_df <- data.frame(
+  month = 1:12,
+  log_effect = c(0, coef(model_fwc_months)[grep("^month", names(coef(model_fwc_months)))])
+) %>%
+  mutate(
+    month_label = factor(month_labels[month], levels = month_labels),
+    rate_multiplier = exp(log_effect)
+  )
+
+ggplot(coef_df, aes(x = month_label, y = rate_multiplier, group = 1)) +
+  geom_line(color = "steelblue") +
+  geom_point(size = 2, color = "steelblue") +
+  geom_text(aes(label = round(rate_multiplier, 2)), vjust = -1, size = 3) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  labs(
+    title = "Monthly Placement Rate Relative to January",
+    x = "Month", y = "Rate multiplier (1.0 = January baseline)"
+  ) +
+  theme_minimal()
+```
+
+For this next part, this is purely me hypothesizing. We removed a lot of information from the graph, only taking the months into account. Therefore, we are only looking at what happens seasonally for this section. 
+
+When we only look at the rate of homeless shelter placements, we see a peak in January (our intercept) compared to the rest of the months. There seems to be a somewhat downtrend until the graph reaches December, where it gets really close to one. The next month being January, this seems to suggest that there is a sharp increase that happens in December that follows into January, resulting in a peak in January. There's a couple of things it could be, but what is happening is that suddenly in these two months there is an increase in the supply in housing. Another way to look at it, is there is a stable decrease in shelter placement. Whether that is by lower demand or lower supply, who's to say? Before investigating, I was of the opinion that it has something to do with leases being renewed, or something involving the school year. 
+
+There's also some things to keep in mind, we are looking at placement rates. We should also keep in mind this model takes out a LOT of data from underneath, data that will be further explored in later sections. For now, I did some digging around and I found a couple of explanations that could explain why this is happening:
+
++  [Lease turnover in June is at its highest](https://stationcities.com/nyc-lease-start-dates-why-timing-your-move-matters-in-2025/). This coupled with the school year ending, it makes sense that June would be the month that has an increase in placements; probably coincides with shelter placements (or an inability to find an apartment in time, therefore being placed by the city?)
+
++ Data from 2023-2024 shows that evictions peak in May, increasing from November steadily, as shown by this [infographic from EvictionLab](https://evictionlab.org/eviction-tracking/new-york-ny/). This almost perfectly lines up with the seemingly increasing rates we see from December all the way to June.
+
+
+
+####### Families with Children Age breakdown
+```{r}
+#regression based on shelter placements
+fwc_reg_age <- data_feat %>%
+  select(c("month",
             "FWC.Unique.Individuals.by.Age...0.thru.5",
             "FWC.Unique.Individuals.by.Age...6.thru.13",
             "FWC.Unique.Individuals.by.Age...14.thru.17",
@@ -884,6 +960,107 @@ fwc_reg <- data %>%
             "FWC.Unique.Individuals.by.Age...30.thru.44",
             "FWC.Unique.Individuals.by.Age...45.thru.64",
             "FWC.Unique.Individuals.by.Age...65.and.above",
+            "fwc_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "fwc_total_shelter_placements"
+
+predictors <- setdiff(names(fwc_reg_age), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_fwc_age <- glm(formula, data = fwc_reg_age, family="poisson")
+summary(model_fwc_age)
+```
+
+There are some real patterns in the data, which support earlier conclusions, that is that homelessness is not a permanent state as most of us think, but it's actually a state of living that a lot of people come in and out of. In other words, the regression done on the data confirms the seasonality of the time series. Though we should note that because we are comparing integers with continuous variables, the numbers are a bit wonky. From just a glance though, it seems that age plays a much bigger role than the seasonality of the families with children homeless population. 
+
+Another quick glance before we look into how age plays into this model exactly, lets take a look at the differences in the deviance between the two models. Deviance, by the way, is the "score" of the model. The further we are from zero, the more work the model could use in effectively predicting outcomes. So when we compare the two models, we can see that age is HUGE at explaining homelessness, way more than seasonality ever could. We have a whopping difference of 4,327.3 points between the models, making age a much better explainer as to what exactly causes homelessness.
+
+```{r, echo=FALSE}
+library(knitr)
+
+model_comparison <- data.frame(
+  Model = c("Month only", "Month + Age brackets"),
+  Predictors = c("month", "month + 8 age brackets"),
+  Null_Deviance = c(5728.4, 5728.4),
+  Residual_Deviance = c(5429.1, 1101.2),
+  Deviance_Explained = c(5728.4 - 5429.1, 5728.4 - 1101.2),
+  Residual_DF = c(109, 101),
+  AIC = c(6458.9, 2147.1)
+)
+
+kable(model_comparison,
+      col.names = c("Model", "Predictors", "Null Deviance", "Residual Deviance",
+                     "Deviance Explained", "Residual df", "AIC"),
+      digits = 1,
+      caption = "Model fit comparison: month-only vs. month + age composition")
+```
+
+
+
+Now, lets focus on what ages exactly are housed in homeless shelters.
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(broom)
+
+age_coefs <- tidy(model_fwc_age, conf.int = TRUE) %>%
+  filter(grepl("^FWC.Unique.Individuals.by.Age", term)) %>%
+  mutate(
+    term = gsub("FWC.Unique.Individuals.by.Age\\.+", "", term),
+    term = gsub("\\.", "-", term),
+    rate_ratio = exp(estimate),
+    ci_low = exp(conf.low),
+    ci_high = exp(conf.high)
+  )
+
+ggplot(age_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
+  geom_point(size = 3, color = "steelblue") +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  labs(
+    title = "Placement Rate Ratio per Additional Person, by Age Group",
+    x = "Age Group", y = "Rate ratio (1.0 = no effect)"
+  ) +
+  theme_minimal()
+```
+Seems that families that have seniors are more likely to be housed, as well as those in the 45-64 age group, which was a little surprising. We have 0-5 and 6-13 above the mean, while the rest of the age groups fall below the mean ratio. If I had to explain this, what most likely this is explaining the weight of dependents. If families are taking care of elderly, the weight of having (at least) one more person at home that is dependent will drive expenses up. Then, we have the most vulnerable age groups that are 0-13. 21-29 is the most "unburdened" by family, so it makes sense this is lower. If I had make a hypothesis before research, 14-17 is considerably lower as this age group isn't fully independent yet, but are at an age that can start contributing to a household.
+
+Now, let's do an ANOVA analysis. Do keep in mind, this is an analysis at a glance. To further improve upon this model in the future, back/forward propagation can be used to ensure that the results are fully independent. For now, we will discuss some interesting findings, but these are not set in stone and warrant additional analysis.
+
+```{r}
+anova(model_fwc_age, test = "Chisq")
+```
+Couple of findings:
+
+The deviance explained from both the age groups 0-5 and 21-29 is astronomical, as they scored 2461.42 and 994.26 respectfully. What this potentially tells us, is that families that are most at risk of becoming homeless are those with dependents. This theory is further confirmed by the age group 21-29 having a negative influence on the overall regression, as we saw with the forest plot up above. In other words, people that are likely to be independent, are not as likely to be housed and this model takes this into account. 
+
+```{r}
+plot(model_fwc_age)
+
+#There is a large tail but otherwise normal. Probably the surge in 2022
+```
+
+Checking the graph. Overall a clean regression. Athough there are some significant outliers, these can likely be explained by the spike in ~2022.
+
+```{r}
+library(car)
+vif(model_fwc_age)
+
+#Insane multicollinearity, but how to handle this within the parameters of the question trying to be asked?
+```
+As a final sanity check, we do see some multicollinearity with this dataset with some variables. It's a given that a data set like this will have crazy collinearity values, and there isn't much that can be done to reduce these without destroying the whole intent of this analysis. For now, we have seen an excellent amount of patterns underneath the data. 
+
+####### Families with Children Ethnicity Breakdown
+
+```{r}
+fwc_reg_eth <- data_feat %>%
+  select(c("month",
             "FWC.Race.Ethnicity.HoH...Asian.Pacific.Islander",
             "FWC.Race.Ethnicity.HoH...Black.non.Hispanic",
             "FWC.Race.Ethnicity.HoH...Hispanic",
@@ -895,70 +1072,71 @@ fwc_reg <- data %>%
 
 target <- "fwc_total_shelter_placements"
 
-predictors <- setdiff(names(fwc_reg), target)
+predictors <- setdiff(names(fwc_reg_eth), target)
 
 formula <- as.formula(
   paste(target, "~", paste(predictors, collapse = " + "))
 )
 
-model_fwc <- glm(formula, data = fwc_reg, family="poisson")
-model_fwc
+model_fwc_eth <- glm(formula, data = fwc_reg_eth, family="poisson")
+summary(model_fwc_eth)
 ```
-A couple of findings
-+ A family is less likely to have a shelter placement based on whether they have children or not (WILL NEED CITATION)
-+ Black and hispanic families are positively correlated with shelter placements
+
+Once again, we see that ethnicity also plays a huge role in explaining the model, way more than each individual month (ie, seasonality) can.
+
+```{r, echo=FALSE}
+library(knitr)
+
+model_comparison <- data.frame(
+  Model = c("Month only", "Month + Age brackets"),
+  Predictors = c("month", "month + 8 age brackets"),
+  Null_Deviance = c(5728.4, 5728.4),
+  Residual_Deviance = c(5429.1, 1101.3),
+  Deviance_Explained = c(5728.4 - 5429.1, 5728.4 - 1101.3),
+  Residual_DF = c(109, 103),
+  AIC = c(6458.9, 2053.2)
+)
+
+kable(model_comparison,
+      col.names = c("Model", "Predictors", "Null Deviance", "Residual Deviance",
+                     "Deviance Explained", "Residual df", "AIC"),
+      digits = 1,
+      caption = "Model fit comparison: month-only vs. month + ethnicity composition")
+```
+
+
+Now, lets focus on what ethnicities exactly are housed in homeless shelters.
 
 ```{r}
-anova(model_fwc, test = "Chisq")
+library(ggplot2)
+library(broom)
+library(dplyr)
+
+eth_coefs <- tidy(model_fwc_eth, conf.int = TRUE) %>%
+  filter(grepl("^FWC.Race.Ethnicity.HoH", term)) %>%
+  mutate(
+    term = gsub("FWC.Race.Ethnicity.HoH\\.+", "", term),
+    term = gsub("\\.", " ", term),
+    rate_ratio = exp(estimate),
+    ci_low = exp(conf.low),
+    ci_high = exp(conf.high)
+  )
+
+ggplot(eth_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
+  geom_point(size = 3, color = "#D2691E") +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2, color = "#D2691E") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  labs(
+    title = "Placement Rate Ratio per Additional Person, by Ethnicity (Head of Household)",
+    x = "Ethnicity", y = "Rate ratio (1.0 = no effect)"
+  ) +
+  theme_minimal()
 ```
-Couple of findings:
 
-This model so far, will predict a negative value when 
+Looking at this graph, we can see some interesting patterns. First, Native Americans (~0.6%) are slightly more likely to be placed into a shelter compared to other ethnicities, followed by Asian Pacific Islanders (0.3%). Black Non-Hispanic and Hispanic stay close to the mean rate, while White Non-Hispanics are the least likely to be placed. From the graphs we saw above, these results are surprising as I expected to see Black non-Hispanic and Hispanic to score higher, but do keep in mind we are working with rates. 
 
-```{r}
-plot(model_fwc)
-
-#There is a large tail but otherwise normal. Probably the surge in 2022
-```
-
-```{r}
-summary(model_fwc)
-```
-```{r}
-library(car)
-vif(model_fwc)
-
-#Insane multicollinearity, but how to handle this within the parameters of the question trying to be asked?
-```
-
-```{r}
-pchisq(model_fwc$deviance,model_fwc$residual, lower.tail=FALSE)
-```
-PROJECT MODIFICATION IDEA
-
-FOR THIS PART, DO A RATE COMPARISON, USING THE ADULT AS THE BASELINE. MAKE TWO SEPERATE REGRESSIONS FOR RACE AND AGE.  
-
-```{r}
-library(glmnet)
-
-# Prepare matrices
-X <- model.matrix(formula, data = fwc_reg)[, -1]  # drop intercept
-y <- fwc_reg$fwc_total_shelter_placements
-
-# Cross-validated LASSO with Poisson family
-set.seed(42)
-cv_lasso <- cv.glmnet(X, y, family = "poisson", alpha = 1)
-
-# Best lambda
-plot(cv_lasso)
-best_lambda <- cv_lasso$lambda.min
-
-# Final model
-lasso_model <- glmnet(X, y, family = "poisson", 
-                      alpha = 1, lambda = best_lambda)
-coef(lasso_model)
-```
-```
+One hypothesis, consistent with broader literature on structural inequality in housing access (see earlier discussion), is that white households may have relatively more alternative housing options — though this single coefficient, given the model's high collinearity, is weak evidence on its own and would need to be tested with a model that isolates ethnicity effects more cleanly.
 
 
 ## Adult Families Regression Analysis
