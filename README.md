@@ -1,7 +1,8 @@
 # 🏙️ NYC Homeless Shelter Analysis (2015–2025)
 
 **Author:** Alejandro Cespedes Fernandez  
-**Last Updated:** February 2026  
+**Last Updated:** August 2026
+**Initially Created:** February 2026  
 **Data Source:** [NYC DHS Data Dashboard](https://catalog.data.gov/dataset/dhs-data-dashboard)
 
 ---
@@ -83,11 +84,9 @@ Poisson regression models were applied to each population group (FWC, AF, SA) to
 
 ## Planned Improvements
 
-- [ ] Separate race and age regressions using adults as the baseline for rate comparison
+- [ X ] Separate race and age regressions using adults as the baseline for rate comparison
 - [ ] Add citation for COVID mortality reduction among homeless persons
 - [ ] Explore veteran homelessness angle further
-- [ ] Address multicollinearity via ridge regression or PCA-based dimensionality reduction
-- [ ] Apply time series modeling to quantify whether the 2022 immigration shock is permanent
 
 ---
 
