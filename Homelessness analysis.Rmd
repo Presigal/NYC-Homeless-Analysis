@@ -29,8 +29,11 @@ There are a lot of features in this data set, here is a deconstruction of the di
 + SA -> Single Adults
 + HoH -> Head of Households
 
+###Objective:
+The objective for this article breakdown is to analyze what census information leads to a housing placement from a temporary shelter. Each section goes into different census categories stated about, FwC, AF, and SA. The statistical model chosen will be a Poisson regression, as we will be working with a rate of placement. 
+
 ### *NOTE TO READER*
-This data set changed halfway into 2022 its reporting frequency to be more frequent. To better explain the data, I decided to only keep the tail end of the data collected that month.  
+This data set changed halfway into 2022 its reporting frequency to be more frequent. To better explain the data, I decided to only keep the tail end of the data collected that month. This analysis is quite lengthy, so at the end I will be placing a results page where I discuss the findings all together and how they compare, and the conclusion section which will be similar to results but with more brevity. I hope you learn as much as I did during this paper, it has taken me quite a while to get everything together!
 
 ```{r, echo=FALSE, include=FALSE}
 library(tidyverse)
@@ -1142,25 +1145,221 @@ One hypothesis, consistent with broader literature on structural inequality in h
 ## Adult Families Regression Analysis
 
 ```{r}
-af_reg <- data %>%
-  select(starts_with("AF"), fwc_total_shelter_placements) %>%
-  mutate(across(everything(), as.numeric)) %>%
-  na.omit()
+af_reg_months <- data_feat %>%
+  select(c("month",
+            "af_total_shelter_placements")  %>%
+            na.omit())
 
 target <- "af_total_shelter_placements"
 
-predictors <- setdiff(names(af_reg), target)
+predictors <- setdiff(names(af_reg_months), target)
 
 formula <- as.formula(
   paste(target, "~", paste(predictors, collapse = " + "))
 )
 
-model_af <- glm(formula, data = af_reg, family = "poisson")
+model_af_months <- glm(formula, data = af_reg_months, family="poisson")
+summary(model_af_months)
 ```
 
 ```{r}
-plot(model_af)
+library(ggplot2)
+library(dplyr)
+
+# Build a coefficient summary with real month labels
+month_labels <- c("Jan","Feb","Mar","Apr","May","Jun",
+                   "Jul","Aug","Sep","Oct","Nov","Dec")
+
+coef_df <- data.frame(
+  month = 1:12,
+  log_effect = c(0, coef(model_af_months)[grep("^month", names(coef(model_af_months)))])
+) %>%
+  mutate(
+    month_label = factor(month_labels[month], levels = month_labels),
+    rate_multiplier = exp(log_effect)
+  )
+
+ggplot(coef_df, aes(x = month_label, y = rate_multiplier, group = 1)) +
+  geom_line(color = "steelblue") +
+  geom_point(size = 2, color = "steelblue") +
+  geom_text(aes(label = round(rate_multiplier, 2)), vjust = -1, size = 3) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  labs(
+    title = "Monthly Placement Rate Relative to January",
+    x = "Month", y = "Rate multiplier (1.0 = January baseline)"
+  ) +
+  theme_minimal()
 ```
+
+####### Adult Families Age breakdown
+```{r}
+#regression based on shelter placements
+af_reg_age <- data_feat %>%
+  select(c("month",
+            "AF.Unique.Individuals.by.Age...18.thru.20",
+            "AF.Unique.Individuals.by.Age...21.thru.29",
+            "AF.Unique.Individuals.by.Age...30.thru.44",
+            "AF.Unique.Individuals.by.Age...45.thru.64",
+            "AF.Unique.Individuals.by.Age...65.and.above",
+            "af_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "af_total_shelter_placements"
+
+predictors <- setdiff(names(af_reg_age), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_af_age <- glm(formula, data = af_reg_age, family="poisson")
+summary(model_af_age)
+```
+
+```{r, echo=FALSE}
+library(knitr)
+
+model_comparison <- data.frame(
+  Model = c("Month only", "Month + Age brackets"),
+  Predictors = c("month", "month + 8 age brackets"),
+  Null_Deviance = c(5728.4, 5728.4),
+  Residual_Deviance = c(5429.1, 1101.2),
+  Deviance_Explained = c(5728.4 - 5429.1, 5728.4 - 1101.2),
+  Residual_DF = c(109, 101),
+  AIC = c(6458.9, 2147.1)
+)
+
+kable(model_comparison,
+      col.names = c("Model", "Predictors", "Null Deviance", "Residual Deviance",
+                     "Deviance Explained", "Residual df", "AIC"),
+      digits = 1,
+      caption = "Model fit comparison: month-only vs. month + age composition")
+```
+
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(broom)
+
+age_coefs <- tidy(model_fwc_age, conf.int = TRUE) %>%
+  filter(grepl("^AF.Unique.Individuals.by.Age", term)) %>%
+  mutate(
+    term = gsub("AF.Unique.Individuals.by.Age\\.+", "", term),
+    term = gsub("\\.", "-", term),
+    rate_ratio = exp(estimate),
+    ci_low = exp(conf.low),
+    ci_high = exp(conf.high)
+  )
+
+ggplot(age_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
+  geom_point(size = 3, color = "steelblue") +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  labs(
+    title = "Placement Rate Ratio per Additional Person, by Age Group",
+    x = "Age Group", y = "Rate ratio (1.0 = no effect)"
+  ) +
+  theme_minimal()
+```
+
+
+
+```{r}
+anova(model_af_age, test = "Chisq")
+```
+
+
+
+```{r}
+plot(model_af_age)
+```
+
+
+```{r}
+library(car)
+vif(model_af_age)
+```
+
+
+####### Adult Families Ethnicity Breakdown
+
+```{r}
+af_reg_eth <- data_feat %>%
+  select(c("month",
+            "AF.Race.Ethnicity.HoH...Asian.Pacific.Islander",
+            "AF.Race.Ethnicity.HoH...Black.non.Hispanic",
+            "AF.Race.Ethnicity.HoH...Hispanic",
+            "AF.Race.Ethnicity.HoH...Native.American",
+            "AF.Race.Ethnicity.HoH...White.non.Hispanic",
+            "AF.Race.Ethnicity.HoH...Unknown",
+            "af_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "af_total_shelter_placements"
+
+predictors <- setdiff(names(af_reg_eth), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_af_eth <- glm(formula, data = af_reg_eth, family="poisson")
+summary(model_af_eth)
+```
+
+
+
+```{r, echo=FALSE}
+library(knitr)
+
+model_comparison <- data.frame(
+  Model = c("Month only", "Month + Age brackets"),
+  Predictors = c("month", "month + 8 age brackets"),
+  Null_Deviance = c(5728.4, 5728.4),
+  Residual_Deviance = c(5429.1, 1101.3),
+  Deviance_Explained = c(5728.4 - 5429.1, 5728.4 - 1101.3),
+  Residual_DF = c(109, 103),
+  AIC = c(6458.9, 2053.2)
+)
+
+kable(model_comparison,
+      col.names = c("Model", "Predictors", "Null Deviance", "Residual Deviance",
+                     "Deviance Explained", "Residual df", "AIC"),
+      digits = 1,
+      caption = "Model fit comparison: month-only vs. month + ethnicity composition")
+```
+
+
+```{r}
+library(ggplot2)
+library(broom)
+library(dplyr)
+
+eth_coefs <- tidy(model_fwc_eth, conf.int = TRUE) %>%
+  filter(grepl("^AF.Race.Ethnicity.HoH", term)) %>%
+  mutate(
+    term = gsub("AF.Race.Ethnicity.HoH\\.+", "", term),
+    term = gsub("\\.", " ", term),
+    rate_ratio = exp(estimate),
+    ci_low = exp(conf.low),
+    ci_high = exp(conf.high)
+  )
+
+ggplot(eth_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
+  geom_point(size = 3, color = "#D2691E") +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2, color = "#D2691E") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  labs(
+    title = "Placement Rate Ratio per Additional Person, by Ethnicity (Head of Household)",
+    x = "Ethnicity", y = "Rate ratio (1.0 = no effect)"
+  ) +
+  theme_minimal()
+```
+
+
 
 ## Single Adults Regression Analysis
 
@@ -1181,6 +1380,272 @@ formula <- as.formula(
 model_sa <- glm(formula, data = sa_reg, family = "poisson")
 ```
 
+
+
 ```{r}
-plot(model_sa)
+sa_reg_months <- data_feat %>%
+  select(c("month",
+            "sa_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "sa_total_shelter_placements"
+
+predictors <- setdiff(names(sa_reg_months), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_sa_months <- glm(formula, data = sa_reg_months, family="poisson")
+summary(model_sa_months)
 ```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Build a coefficient summary with real month labels
+month_labels <- c("Jan","Feb","Mar","Apr","May","Jun",
+                   "Jul","Aug","Sep","Oct","Nov","Dec")
+
+coef_df <- data.frame(
+  month = 1:12,
+  log_effect = c(0, coef(model_sa_months)[grep("^month", names(coef(model_sa_months)))])
+) %>%
+  mutate(
+    month_label = factor(month_labels[month], levels = month_labels),
+    rate_multiplier = exp(log_effect)
+  )
+
+ggplot(coef_df, aes(x = month_label, y = rate_multiplier, group = 1)) +
+  geom_line(color = "steelblue") +
+  geom_point(size = 2, color = "steelblue") +
+  geom_text(aes(label = round(rate_multiplier, 2)), vjust = -1, size = 3) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  labs(
+    title = "Monthly Placement Rate Relative to January",
+    x = "Month", y = "Rate multiplier (1.0 = January baseline)"
+  ) +
+  theme_minimal()
+```
+
+####### Single Adult Age breakdown
+```{r}
+#regression based on shelter placements
+sa_reg_age <- data_feat %>%
+  select(c("month",
+              "SA.Unique.Individuals.by.Age...18.thru.29",
+              "SA.Unique.Individuals.by.Age...30.thru.44",
+              "SA.Unique.Individuals.by.Age...45.thru.64",
+              "SA.Unique.Individuals.by.Age...65.and.above",
+            "sa_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "sa_total_shelter_placements"
+
+predictors <- setdiff(names(sa_reg_age), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_sa_age <- glm(formula, data = sa_reg_age, family="poisson")
+summary(model_sa_age)
+```
+
+```{r, echo=FALSE}
+library(knitr)
+
+model_comparison <- data.frame(
+  Model = c("Month only", "Month + Age brackets"),
+  Predictors = c("month", "month + 8 age brackets"),
+  Null_Deviance = c(5728.4, 5728.4),
+  Residual_Deviance = c(5429.1, 1101.2),
+  Deviance_Explained = c(5728.4 - 5429.1, 5728.4 - 1101.2),
+  Residual_DF = c(109, 101),
+  AIC = c(6458.9, 2147.1)
+)
+
+kable(model_comparison,
+      col.names = c("Model", "Predictors", "Null Deviance", "Residual Deviance",
+                     "Deviance Explained", "Residual df", "AIC"),
+      digits = 1,
+      caption = "Model fit comparison: month-only vs. month + age composition")
+```
+
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(broom)
+
+age_coefs <- tidy(model_sa_age, conf.int = TRUE) %>%
+  filter(grepl("^SA.Unique.Individuals.by.Age", term)) %>%
+  mutate(
+    term = gsub("SA.Unique.Individuals.by.Age\\.+", "", term),
+    term = gsub("\\.", "-", term),
+    rate_ratio = exp(estimate),
+    ci_low = exp(conf.low),
+    ci_high = exp(conf.high)
+  )
+
+ggplot(age_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
+  geom_point(size = 3, color = "steelblue") +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  labs(
+    title = "Placement Rate Ratio per Additional Person, by Age Group",
+    x = "Age Group", y = "Rate ratio (1.0 = no effect)"
+  ) +
+  theme_minimal()
+```
+
+
+
+```{r}
+anova(model_sa_age, test = "Chisq")
+```
+
+
+
+```{r}
+plot(model_sa_age)
+```
+
+
+```{r}
+library(car)
+vif(model_sa_age)
+```
+
+
+####### Adult Families Ethnicity Breakdown
+
+```{r}
+sa_reg_eth <- data_feat %>%
+  select(c("month",
+            "SA.Race.Ethnicity.HoH...Asian.Pacific.Islander",
+            "SA.Race.Ethnicity.HoH...Black.non.Hispanic",
+            "SA.Race.Ethnicity.HoH...Hispanic",
+            "SA.Race.Ethnicity.HoH...Native.American",
+            "SA.Race.Ethnicity.HoH...White.non.Hispanic",
+            "SA.Race.Ethnicity.HoH...Unknown",
+            "sa_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "sa_total_shelter_placements"
+
+predictors <- setdiff(names(sa_reg_eth), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_sa_eth <- glm(formula, data = sa_reg_eth, family="poisson")
+summary(model_sa_eth)
+```
+
+
+
+```{r, echo=FALSE}
+library(knitr)
+
+model_comparison <- data.frame(
+  Model = c("Month only", "Month + Age brackets"),
+  Predictors = c("month", "month + 8 age brackets"),
+  Null_Deviance = c(5728.4, 5728.4),
+  Residual_Deviance = c(5429.1, 1101.3),
+  Deviance_Explained = c(5728.4 - 5429.1, 5728.4 - 1101.3),
+  Residual_DF = c(109, 103),
+  AIC = c(6458.9, 2053.2)
+)
+
+kable(model_comparison,
+      col.names = c("Model", "Predictors", "Null Deviance", "Residual Deviance",
+                     "Deviance Explained", "Residual df", "AIC"),
+      digits = 1,
+      caption = "Model fit comparison: month-only vs. month + ethnicity composition")
+```
+
+
+```{r}
+library(ggplot2)
+library(broom)
+library(dplyr)
+
+eth_coefs <- tidy(model_sa_eth, conf.int = TRUE) %>%
+  filter(grepl("^SA.Race.Ethnicity.HoH", term)) %>%
+  mutate(
+    term = gsub("SA.Race.Ethnicity.HoH\\.+", "", term),
+    term = gsub("\\.", " ", term),
+    rate_ratio = exp(estimate),
+    ci_low = exp(conf.low),
+    ci_high = exp(conf.high)
+  )
+
+ggplot(eth_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
+  geom_point(size = 3, color = "#D2691E") +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2, color = "#D2691E") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  labs(
+    title = "Placement Rate Ratio per Additional Person, by Ethnicity (Head of Household)",
+    x = "Ethnicity", y = "Rate ratio (1.0 = no effect)"
+  ) +
+  theme_minimal()
+```
+
+
+######## Single Adult Breakdown by Gender
+
+```{r}
+sa_reg_gdr <- data_feat %>%
+  select(c("month",
+            "SA.Avg.Daily.census.Individual.in.Shelter...Men",
+            "SA.Avg.Daily.census.Individual.in.Shelter...Women",
+            "af_total_shelter_placements")  %>%
+            na.omit())
+
+target <- "af_total_shelter_placements"
+
+predictors <- setdiff(names(sa_reg_gdr), target)
+
+formula <- as.formula(
+  paste(target, "~", paste(predictors, collapse = " + "))
+)
+
+model_sa_gdr <- glm(formula, data = sa_reg_gdr, family="poisson")
+summary(model_sa_gdr)
+```
+
+```{r}
+library(ggplot2)
+library(broom)
+library(dplyr)
+
+gender_coefs <- tidy(model_sa_gdr, conf.int = TRUE) %>%
+  filter(grepl("^SA.Avg.Daily.census.Individual.in.Shelter", term)) %>%
+  mutate(
+    term = gsub("SA.Avg.Daily.census.Individual.in.Shelter\\.+", "", term),
+    term = gsub("\\.", " ", term),
+    rate_ratio = exp(estimate),
+    ci_low = exp(conf.low),
+    ci_high = exp(conf.high)
+  )
+
+ggplot(gender_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
+  geom_point(size = 3, color = "orange") +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2, color = "orange") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  labs(
+    title = "Placement Rate Ratio per Additional Person, by Gender",
+    x = "Gender", y = "Rate ratio (1.0 = no effect)"
+  ) +
+  theme_minimal()
+```
+```{r}
+plot(model_sa_gdr)
+```
+
