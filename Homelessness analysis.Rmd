@@ -30,7 +30,7 @@ There are a lot of features in this data set, here is a deconstruction of the di
 + HoH -> Head of Households
 
 ###Objective:
-The objective for this article breakdown is to analyze what census information leads to a housing placement from a temporary shelter. Each section goes into different census categories stated about, FwC, AF, and SA. The statistical model chosen will be a Poisson regression, as we will be working with a rate of placement. 
+The objective for this article breakdown is to analyze what census information leads to a housing placement from a temporary shelter. When discussing housing placement specifically, it refers to being moved into subsidized or unsubsidized housing, or informal agreements like moving in with a relative.  Each section goes into different census categories stated about, FwC, AF, and SA. The statistical model chosen will be a QuasiPoisson regression, as we will be working with a rate of placement. 
 
 ### *NOTE TO READER*
 This data set changed halfway into 2022 its reporting frequency to be more frequent. To better explain the data, I decided to only keep the tail end of the data collected that month. This analysis is quite lengthy, so at the end I will be placing a results page where I discuss the findings all together and how they compare, and the conclusion section which will be similar to results but with more brevity. I hope you learn as much as I did during this paper, it has taken me quite a while to get everything together!
@@ -962,7 +962,7 @@ age_cols <- c(
 ```
 
 
-```{r}
+```{r, echo = FALSE}
 library(dplyr)
 
 fwc_reg_months <- data_feat %>%
@@ -1025,7 +1025,7 @@ There's also some things to keep in mind, we are looking at placement rates. We 
 #### Families with Children Age breakdown
 
 
-```{r}
+```{r, echo = FALSE}
 #regression based on shelter placements
 fwc_reg_age_ref05 <- data_feat %>%
   select(all_of(c("month", age_cols, "fwc_total_shelter_placements"))) %>%
@@ -1073,7 +1073,7 @@ kable(model_comparison,
 
 Something definitely worth checking before we continue, is <u>overdispersion.</u> I strongly suspect we are likely to find a lot of that here, given that FwC has data that (expectedly) moves together, so there is bound to be multicollinearily AND overdispersion. More than likely, the surge in 2022 was a big reason for that surge as well. This is worth looking into. Below, 
 
-```{r}
+```{r, echo = FALSE}
  
 library(dplyr)
 library(lubridate)
@@ -1102,7 +1102,7 @@ model_no2022 <- glm(
   fwc_total_shelter_placements ~ . - fwc_total_population
     + offset(log(fwc_total_population)),
   data = fwc_reg_age_no2022,
-  family = "poisson"
+  family = "quasipoisson"
 )
  
 dispersion_no2022 <- deviance(model_no2022) / df.residual(model_no2022)
@@ -1132,12 +1132,11 @@ Couple of things to note. First, residual deviance barely decreased when we remo
 
 More importantly, the dispersion ratio is crazy. Dispersion is an important term to understand here, before we continue. Dispersion was assessed as $\hat{\phi} = D / (n-p)$, the ratio of residual deviance to residual degrees of freedom, where values well above 1 indicate overdispersion. In other words, is our variance what the model expects, or is it larger (or smaller) than the model assumes? Typically, a value of 1 is perfect, this means our model pretty much nailed the pattern of the data.
 
-That is not what we are seeing here. In fact, we are seeing some catastrophic numbers. This means that there are a lot of red flags with the model, and potentially not the greatest fit for the model. 
 
 
 Now, lets focus on what ages exactly are housed in homeless shelters.
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(tidyverse)
 library(broom)
@@ -1167,14 +1166,14 @@ ggplot(age_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
 
 When we compare the age group 0-5 with the rest of the variables, we see some interesting patterns emerge.
 
-Firstly, we can see that the most uncertain rate is with 65-and-above. Even with the wide range, it is still the most likely age group to find placement compared to the others. If I had to take a guess as to why, this is because if a family has someone 65+ taking care of a 0-5 year old, I imagine they would need a lot more assistance in finding shelter as they cannot work as much as the other groups. 
+Firstly, we can see that the most uncertain rate is with 65-and-above, and it's not even close. Its interval spans from below 1 to over 15, and the corrected p-value ($\approx 0.38$) confirms we cannot distinguish this bracket's rate from the 0-5 reference. What we can infer from this is that, at least with the statistical power available in this dataset, having grandparents in the family doesn't show a detectable effect on FWC placement - though given how wide this interval is, we can't rule out a real effect that this data simply isn't precise enough to pin down. I did not expect this, as I thought additional dependents (assuming people 65+ are retired) would be a priority in placement decisions."
 
-Some other surprises that show up here is that 21-29 is among the lowest, I did not expect this result. What I DID expect was 14-17 being the lowest. At this age, The children are more independent and are able to roam around more, and perhaps work under the table jobs. Of course, please remember this is all pure conjecture, an educated guess at most. Seeing 6-13 being lower does not surprise me as much, since 6 years old is around the time that children being schooling. Families receive government assistance, and parents are able to work while children are in school. 
+I DID expect was 14-17 being the lowest. At this age, The children are more independent and are able to roam around more, and perhaps work under the table jobs. Of course, please remember this is all pure conjecture, an educated guess at most. Seeing 6-13 being lower does not surprise me as much, since 6 years old is around the time that children being schooling. Families receive government assistance, and parents are able to work while children are in school. 
 
-45-64 being considerably higher is interesting though. Compared to 0-5 year olds, it makes me wonder if older parents are more likely to be placed in housing due to preexisting conditions. Here however, I am not sure. 
+45-64 being higher is interesting though. Compared to 0-5 year olds, it makes me wonder if older parents are more likely to be placed in housing due to preexisting conditions. Here however, I am not sure. 
 
 
-```{r}
+```{r, echo = FALSE}
 anova(model_ref05, test = "Chisq")
 ```
 Couple of findings:
@@ -1183,14 +1182,46 @@ The deviance explained from both the age groups 6-13 and 30-44 is enormous, as t
 
 What this ANOVA model tells us, is that most of the families receiving shelter placements are families with children from ages 0-13, and the parents are typically 30-44. The parents can also be 21-29 and 45-64, although this is less likely.
 
-```{r}
+```{r, echo = FALSE}
 par(mfrow=c(2, 2))
 plot(model_ref05)
 
 #There is a large tail but otherwise normal. Probably the surge in 2022
 ```
 
-There are a couple of things that warrant discussion in these graphs. First, we can see some very clear outliers in the Residuals vs Fitted graph. 
+There are a couple of things that warrant discussion in these graphs. First, we can see some very clear outliers in the Residuals vs Fitted graph. It's always the same points too, isn't it? 72, 46, and 119. Interestingly, these points also seem to have a lot of leverage over the regression. A plausible hypothesis for these points are that these correlate either with the start of the COVID pandemic, or the surge in 2022. This requires a deeper investigation. 
+
+```{r, echo = FALSE}
+## Pull the specific flagged observations using their original row names,
+## which glm() preserves through na.omit()
+
+flagged_rows <- c("72", "46", "119")
+
+fwc_reg_age_ref05[flagged_rows, ]
+
+## Also attach fitted values, raw residuals, and Pearson residuals
+## for context on why each one stood out
+
+diagnostics <- data.frame(
+  observed  = fwc_reg_age_ref05[flagged_rows, "fwc_total_shelter_placements"],
+  fitted    = fitted(model_ref05)[flagged_rows],
+  resid_pearson = residuals(model_ref05, type = "pearson")[flagged_rows],
+  resid_deviance = residuals(model_ref05, type = "deviance")[flagged_rows]
+)
+print(diagnostics)
+
+## If you still have month/year info in data_feat (or another version
+## of the data with dates preserved), pull those in to check your
+## COVID/2022 hypothesis directly:
+
+data_feat[flagged_rows, c("Report.Date", "month")]  # adjust column names as needed
+```
+Fascinating. I did not expect these dates. At all. In fact, if there were least likely points I could pick, I would pick these. Now, why would these points be the most influential?
+
+The same three points keep showing up across all four diagnostic plots: 72, 46, and 119. Going in, I hypothesized these might line up with the start of COVID or the 2022 migration surge, since those are the extreme events we've seen drive spikes elsewhere in this analysis. Turns out that's wrong. When I actually pulled the dates, point 72 is June 2021, point 46 is April 2019, and point 119 is January 2025. None of these come anywhere close to either event I expected.
+
+So what do these three actually have in common? Looking at the observed versus predicted values, all three follow the same pattern: the model badly underestimates what actually happened. Point 72 predicted about 533 placements when 836 actually occurred. Point 46 and 119 show the same story, just with different numbers. Something is driving placements well above what age composition and seasonality alone would suggest, and it's not one of the two obvious events I assumed it would be.
+
 
 ```{r}
 library(car)
@@ -1198,11 +1229,14 @@ vif(model_ref05)
 
 #Insane multicollinearity, but how to handle this within the parameters of the question trying to be asked?
 ```
-As a final sanity check, we do see some multicollinearity with this dataset with some variables. It's a given that a data set like this will have crazy collinearity values, and there isn't much that can be done to reduce these without destroying the whole intent of this analysis. The highest value for VIF here is 30-44 with a value of ~26, well above accepted standards. What is probably happening here is that family placement cycle perfectly correlates with the 30-44 group - the group most likely to be parents, with the children themselves, so of course the VIF is going to skyrocket. 
 
-####### Families with Children Ethnicity Breakdown
+As a final sanity check, we do see some multicollinearity with this dataset with some variables. It's a given that a data set like this will have crazy collinearity values, and there isn't much that can be done to reduce these without destroying the whole intent of this analysis. The highest value for VIF here is 30-44 with a value of ~26, well above accepted standards. What is probably happening here is that family placement cycle perfectly correlates with the 30-44 group - the group most likely to be parents, with the children themselves, so of course the VIF is going to skyrocket. This is further supported from our summary table, where our 30-44 feature had a significance level of $\approx 0.092526$, just barely enough to not be considered significant.
 
-```{r}
+#### Families with Children Ethnicity Breakdown
+
+Now, we continue with an ethnic breakdown of FwC as opposed to by age group. The model is still quasipoisson, to control for overdispersion. 
+
+```{r, echo = FALSE}
 library(dplyr)
 library(car)
  
@@ -1229,13 +1263,13 @@ formula <- as.formula(
   paste(target, "~", paste(predictors, collapse = " + "), "+ offset(log(fwc_total_population))")
 )
  
-model_fwc_eth <- glm(formula, data = fwc_reg_eth, family = "poisson")
+model_fwc_eth <- glm(formula, data = fwc_reg_eth, family = "quasipoisson")
  
 summary(model_fwc_eth)
 
 ```
 
-Once again, we see that ethnicity also plays a huge role in explaining the model, way more than each individual month (ie, seasonality) can.
+Once again, we see that ethnicity also plays a huge role in explaining the model, way more than each individual month (ie, seasonality) can. Every single ethnicity can be considered statistically significant if we assume $\alpha \approx 0.05$, except for unknown ethnicity. When we compare to the month by month breakdown, the months only have one significant month (11). With these values, we have enough information to continue with the hypothesis that ethnicity (also) plays a major role in landing more permanent housing. 
 
 ```{r, echo=FALSE}
 library(knitr)
@@ -1260,15 +1294,15 @@ kable(model_comparison,
 
 Now, lets focus on what ethnicities exactly are housed in homeless shelters.
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(broom)
 library(dplyr)
 
 eth_coefs <- tidy(model_fwc_eth, conf.int = TRUE) %>%
-  filter(grepl("^FWC.Race.Ethnicity.HoH", term)) %>%
+  filter(grepl("^pctpt_FWC", term)) %>%
   mutate(
-    term = gsub("FWC.Race.Ethnicity.HoH\\.+", "", term),
+    term = gsub("pctpt_FWC\\.Race\\.Ethnicity\\.HoH\\.+", "", term),
     term = gsub("\\.", " ", term),
     rate_ratio = exp(estimate),
     ci_low = exp(conf.low),
@@ -1281,24 +1315,78 @@ ggplot(eth_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
   geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
   coord_flip() +
   labs(
-    title = "Placement Rate Ratio per Additional Person, by Ethnicity (Head of Household)",
-    x = "Ethnicity", y = "Rate ratio (1.0 = no effect)"
+    title = "Placement Rate Ratio per 1 Percentage Point Increase, by Ethnicity",
+    subtitle = "Relative to the Black Non-Hispanic reference bracket",
+    x = "Ethnicity", y = "Rate ratio (1.0 = same as Black Non-Hispanic bracket)"
   ) +
   theme_minimal()
 ```
 
-Looking at this graph, we can see some interesting patterns. First, Native Americans (~0.6%) are slightly more likely to be placed into a shelter compared to other ethnicities, followed by Asian Pacific Islanders (0.3%). Black Non-Hispanic and Hispanic stay close to the mean rate, while White Non-Hispanics are the least likely to be placed. From the graphs we saw above, these results are surprising as I expected to see Black non-Hispanic and Hispanic to score higher, but do keep in mind we are working with rates. 
+Looking at this graph, we can see some interesting patterns. First, Native Americans are less likely to be placed into a shelter compared to other ethnicities, with quite a large margin of error. Asian Pacific Islanders also has a high margin of error, but with a higher probable rate of being placed compared to African Americans. Hispanic stays close to the mean rate, implying Hispanics and African Americans get placed at about the same rate. White Non-Hispanics on the other hand, are least likely to be placed. From the graphs we saw above, these results are surprising as I expected to see Black non-Hispanic and Hispanic to be higher, but do keep in mind we are working with rates. 
 
-One hypothesis, consistent with broader literature on structural inequality in housing access (see earlier discussion), is that white households may have relatively more alternative housing options — though this single coefficient, given the model's high collinearity, is weak evidence on its own and would need to be tested with a model that isolates ethnicity effects more cleanly.
+One hypothesis, consistent with broader literature on structural inequality in housing access (see earlier discussion), is that white households may have relatively more alternative housing options - though this single coefficient, given the model's high collinearity, is weak evidence on its own and would need to be tested with a model that isolates ethnicity effects more cleanly.
 
+Moving on to the ANOVA analysis:
+
+```{r, echo = FALSE}
+anova(model_fwc_eth, test = "Chisq")
+```
+
+Compared to the age breakdown, we do not see the huge chunks being taken off the ANOVA analysis, but instead it seems like only one feature explains most of the model, and that is the Hispanic group. When we look back at the charts, we noticed that Hispanic and African american families made up a huge chunk of the share of the stacked line graph. Another interesting observation that we see is the (small) contribution Native Americans have on the regression. If I were to guess, the reason for this is that Native Americans are not living in NYC in the first place, so their sample size isn't enough to make proper inference, and that itself is the inference we can take away from this. 
+
+When we look at the box plot though, we do see that there is a small population of placements with Native Americans AND Asian Pacific Islanders, so it's important to not isolate this to just "Native Americans not living in New York". 
+
+```{r, echo = FALSE}
+par(mfrow=c(2, 2))
+plot(model_fwc_eth)
+
+#There is a large tail but otherwise normal. Probably the surge in 2022
+```
+
+Interesting. The same exact rows we saw flagged in the age regression. Both models struggle to predict these three months well, despite using completely different predictors (age composition vs. ethnicity composition). That's interesting because it suggests whatever is driving the discrepancy isn't about demographic composition at all but it's something affecting total placement volume in those specific months, independent of who was placed. This doesn't mean something definitively happened on these dates, but it's a reasonable place to ask further questions, and worth flagging as a direction for future investigation rather than something this paper can fully resolve.
+
+```{r, echo = FALSE}
+## Pull the specific flagged observations using their original row names,
+## which glm() preserves through na.omit()
+
+flagged_rows <- c("72", "46", "119")
+
+
+fwc_reg_eth[flagged_rows, ]
+
+## Also attach fitted values, raw residuals, and Pearson residuals
+## for context on why each one stood out
+
+diagnostics <- data.frame(
+  observed  = fwc_reg_eth[flagged_rows, "fwc_total_shelter_placements"],
+  fitted    = fitted(model_fwc_eth)[flagged_rows],
+  resid_pearson = residuals(model_fwc_eth, type = "pearson")[flagged_rows],
+  resid_deviance = residuals(model_fwc_eth, type = "deviance")[flagged_rows]
+)
+print(diagnostics)
+
+## If you still have month/year info in data_feat (or another version
+## of the data with dates preserved), pull those in to check your
+## COVID/2022 hypothesis directly:
+
+data_feat[flagged_rows, c("Report.Date", "month")]  # adjust column names as needed
+```
+These values are even similar to the age regression. However, I want to save these discussions towards the end, so for now we will continue. 
+
+```{r}
+library(car)
+vif(model_fwc_eth)
+#Insane multicollinearity, but how to handle this within the parameters of the question trying to be asked?
+```
+Finally, we arrive at the VIF scores. Seeing these is almost a breath of fresh air compared to the age model. We're not seeing the catastrophic values we saw before, which means the ethnicity proportions are much less collinear with each other than the age brackets were. In other words, the model can tell these ethnicity variables apart from one another far more reliably. The highest VIF score here is Unknown ethnicity, sitting just above the conventional threshold of 5, so I'd treat that coefficient with a bit of caution, similar to how we treated 30-44 in the age model. Every other ethnicity category comes in under 5, which means their coefficients can be trusted with reasonably low uncertainty from collinearity specifically. This doesn't tell us anything yet about whether ethnicity is actually a strong predictor of placement, or whether the overall model fits well. That's a separate question we've already looked at through deviance and dispersion, but it does mean we can read each ethnicity coefficient's individual effect with more confidence than we could for the age brackets.
 
 ## Adult Families Regression Analysis
 
 As discussed before, Adult Families are family units where every member is above 18 years old. Naturally, the ages 0-17 are excluded from these regressions. 
 
-The same "control" regression will be used as with FwC, only looking at the coefficients month by month.
+The same "control" regression will be used as with FwC, only looking at the coefficients month by month, lets see what we can uncover!
 
-```{r}
+```{r, echo = FALSE}
 af_reg_months <- data_feat %>%
   select(c("month",
             "af_total_shelter_placements")  %>%
@@ -1316,9 +1404,9 @@ model_af_months <- glm(formula, data = af_reg_months, family="poisson")
 summary(model_af_months)
 ```
 
-Interestingly, we see that our P values are not as significant. This potentially means that the cycle of placements that was discussed earlier relating to the school year for FwC does not affect Adult Families as much. 
+Interestingly, we see that our P values are not as significant. This potentially means that the cycle of placements that was discussed earlier relating to the school year for FwC does not affect Adult Families as much. Lets continue to see what other patterns can be infered from the graph:
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(dplyr)
 
@@ -1347,11 +1435,10 @@ ggplot(coef_df, aes(x = month_label, y = rate_multiplier, group = 1)) +
   theme_minimal()
 ```
 
-Taking a look at the graph itself though, we 
-
+Taking a look at the graph itself though, we see a more irregular graph, although it still follows the summer cycle. This follows the same pattern we saw with FwC, that lease turnovers increase in June, therefore leading to higher placements around this time. Also how evictions peak in May, so perhaps the peak we see in May is coming from those waiting for temporary housing being placed into permanent homes, and those permanent homes being the homes that were evicted? It's certainly plausible to make this claim.
 
 ####### Adult Families Age breakdown
-```{r}
+```{r, echo = FALSE}
 #regression based on shelter placements
 af_reg_age <- data_feat %>%
   select(c("month",
@@ -1396,7 +1483,7 @@ kable(model_comparison,
 ```
 
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(tidyverse)
 library(broom)
@@ -1425,18 +1512,19 @@ ggplot(age_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
 
 
 
-```{r}
+```{r, echo = FALSE}
 anova(model_af_age, test = "Chisq")
 ```
 
 
 
-```{r}
+```{r, echo = FALSE}
+par(mfrow=c(2, 2))
 plot(model_af_age)
 ```
 
 
-```{r}
+```{r, echo = FALSE}
 library(car)
 vif(model_af_age)
 ```
@@ -1444,7 +1532,7 @@ vif(model_af_age)
 
 ####### Adult Families Ethnicity Breakdown
 
-```{r}
+```{r, echo = FALSE}
 af_reg_eth <- data_feat %>%
   select(c("month",
             "AF.Race.Ethnicity.HoH...Asian.Pacific.Islander",
@@ -1491,7 +1579,7 @@ kable(model_comparison,
 ```
 
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(broom)
 library(dplyr)
@@ -1522,7 +1610,7 @@ ggplot(eth_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
 
 ## Single Adults Regression Analysis
 
-```{r}
+```{r, echo = FALSE}
 sa_reg <- data %>%
   select(starts_with("SA"), sa_total_shelter_placements) %>%
   mutate(across(everything(), as.numeric)) %>%
@@ -1541,7 +1629,7 @@ model_sa <- glm(formula, data = sa_reg, family = "poisson")
 
 
 
-```{r}
+```{r, echo = FALSE}
 sa_reg_months <- data_feat %>%
   select(c("month",
             "sa_total_shelter_placements")  %>%
@@ -1559,7 +1647,7 @@ model_sa_months <- glm(formula, data = sa_reg_months, family="poisson")
 summary(model_sa_months)
 ```
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(dplyr)
 
@@ -1589,7 +1677,7 @@ ggplot(coef_df, aes(x = month_label, y = rate_multiplier, group = 1)) +
 ```
 
 ####### Single Adult Age breakdown
-```{r}
+```{r, echo = FALSE}
 #regression based on shelter placements
 sa_reg_age <- data_feat %>%
   select(c("month",
@@ -1633,7 +1721,7 @@ kable(model_comparison,
 ```
 
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(tidyverse)
 library(broom)
@@ -1662,18 +1750,18 @@ ggplot(age_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
 
 
 
-```{r}
+```{r, echo = FALSE}
 anova(model_sa_age, test = "Chisq")
 ```
 
 
 
-```{r}
+```{r, echo = FALSE}
 plot(model_sa_age)
 ```
 
 
-```{r}
+```{r, echo = FALSE}
 library(car)
 vif(model_sa_age)
 ```
@@ -1681,7 +1769,7 @@ vif(model_sa_age)
 
 ####### Adult Families Ethnicity Breakdown
 
-```{r}
+```{r, echo = FALSE}
 sa_reg_eth <- data_feat %>%
   select(c("month",
             "SA.Race.Ethnicity.HoH...Asian.Pacific.Islander",
@@ -1728,7 +1816,7 @@ kable(model_comparison,
 ```
 
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(broom)
 library(dplyr)
@@ -1758,7 +1846,7 @@ ggplot(eth_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
 
 ######## Single Adult Breakdown by Gender
 
-```{r}
+```{r, echo = FALSE}
 sa_reg_gdr <- data_feat %>%
   select(c("month",
             "SA.Avg.Daily.census.Individual.in.Shelter...Men",
@@ -1778,7 +1866,7 @@ model_sa_gdr <- glm(formula, data = sa_reg_gdr, family="poisson")
 summary(model_sa_gdr)
 ```
 
-```{r}
+```{r, echo = FALSE}
 library(ggplot2)
 library(broom)
 library(dplyr)
@@ -1804,165 +1892,9 @@ ggplot(gender_coefs, aes(x = reorder(term, rate_ratio), y = rate_ratio)) +
   ) +
   theme_minimal()
 ```
-```{r}
+
+
+
+```{r, echo = FALSE}
 plot(model_sa_gdr)
 ```
-
-```{r}
-## ============================================================
-## FWC age regression: raw counts vs. proportions (unmerged)
-## vs. proportions (30-44 + 45-64 merged)
-## Proportions expressed in PERCENTAGE POINTS (0-100), not
-## raw proportions (0-1), so coefficients are directly readable
-## as "rate ratio per 1 percentage point increase" -- no manual
-## rescaling needed after the fact.
-## ============================================================
-
-library(dplyr)
-library(car)
-
-## ------------------------------------------------------------
-## 0. Assumes `data_feat` already exists, same as before.
-## ------------------------------------------------------------
-
-age_cols <- c(
-  "FWC.Unique.Individuals.by.Age...0.thru.5",
-  "FWC.Unique.Individuals.by.Age...6.thru.13",
-  "FWC.Unique.Individuals.by.Age...14.thru.17",
-  "FWC..Unique.Individuals.by.Age..18.thru.20",
-  "FWC.Unique.Individuals.by.Age...21.thru.29",
-  "FWC.Unique.Individuals.by.Age...30.thru.44",
-  "FWC.Unique.Individuals.by.Age...45.thru.64",
-  "FWC.Unique.Individuals.by.Age...65.and.above"
-)
-
-## ------------------------------------------------------------
-## 1. MODEL 1: raw counts, no offset (original, kept for reference)
-## ------------------------------------------------------------
-
-fwc_reg_age_raw <- data_feat %>%
-  select(all_of(c("month", age_cols, "fwc_total_shelter_placements"))) %>%
-  na.omit()
-
-model_raw <- glm(
-  fwc_total_shelter_placements ~ .,
-  data = fwc_reg_age_raw,
-  family = "poisson"
-)
-
-## ------------------------------------------------------------
-## 2. MODEL 2: proportions (percentage points), all brackets,
-##    21-29 dropped as reference, offset for total population
-## ------------------------------------------------------------
-
-fwc_reg_age_prop <- data_feat %>%
-  select(all_of(c("month", age_cols, "fwc_total_shelter_placements"))) %>%
-  na.omit() %>%
-  mutate(fwc_total_population = rowSums(across(all_of(age_cols)))) %>%
-  mutate(across(all_of(age_cols), ~ 100 * .x / fwc_total_population, .names = "pctpt_{.col}")) %>%
-  select(month, starts_with("pctpt_"), fwc_total_population, fwc_total_shelter_placements) %>%
-  select(-`pctpt_FWC.Unique.Individuals.by.Age...21.thru.29`)
-
-model_prop <- glm(
-  fwc_total_shelter_placements ~ . - fwc_total_population
-    + offset(log(fwc_total_population)),
-  data = fwc_reg_age_prop,
-  family = "poisson"
-)
-
-## ------------------------------------------------------------
-## 3. MODEL 3: proportions (percentage points), 30-44 and 45-64
-##    merged -- kept for comparison, but note this fit WORSE
-##    than model 2 on deviance/AIC in earlier testing, so treat
-##    model 2 as the primary candidate unless this changes that.
-## ------------------------------------------------------------
-
-fwc_reg_age_merged <- data_feat %>%
-  select(all_of(c("month", age_cols, "fwc_total_shelter_placements"))) %>%
-  na.omit() %>%
-  mutate(
-    fwc_total_population = rowSums(across(all_of(age_cols))),
-    adults_30_64 = `FWC.Unique.Individuals.by.Age...30.thru.44` +
-                   `FWC.Unique.Individuals.by.Age...45.thru.64`
-  ) %>%
-  mutate(
-    pctpt_0_5   = 100 * `FWC.Unique.Individuals.by.Age...0.thru.5`      / fwc_total_population,
-    pctpt_6_13  = 100 * `FWC.Unique.Individuals.by.Age...6.thru.13`     / fwc_total_population,
-    pctpt_14_17 = 100 * `FWC.Unique.Individuals.by.Age...14.thru.17`    / fwc_total_population,
-    pctpt_18_20 = 100 * `FWC..Unique.Individuals.by.Age..18.thru.20`    / fwc_total_population,
-    pctpt_30_64 = 100 * adults_30_64                                    / fwc_total_population,
-    pctpt_65up  = 100 * `FWC.Unique.Individuals.by.Age...65.and.above`  / fwc_total_population
-    # 21-29 dropped again as the reference category
-  ) %>%
-  select(month, starts_with("pctpt_"), fwc_total_population, fwc_total_shelter_placements)
-
-model_merged <- glm(
-  fwc_total_shelter_placements ~ . - fwc_total_population
-    + offset(log(fwc_total_population)),
-  data = fwc_reg_age_merged,
-  family = "poisson"
-)
-
-## ------------------------------------------------------------
-## 4. VIF comparison
-## ------------------------------------------------------------
-
-cat("\n================ VIF: raw model ================\n")
-print(vif(model_raw))
-
-cat("\n================ VIF: proportions, unmerged (pct points) ================\n")
-print(vif(model_prop))
-
-cat("\n================ VIF: proportions, merged (pct points) ================\n")
-print(vif(model_merged))
-
-cat("\n================ Max VIF summary ================\n")
-cat("Raw model max VIF:             ", max(vif(model_raw)[, 1]), "\n")
-cat("Proportions (unmerged) max VIF:", max(vif(model_prop)[, 1]), "\n")
-cat("Proportions (merged) max VIF:  ", max(vif(model_merged)[, 1]), "\n")
-
-## ------------------------------------------------------------
-## 5. Fit comparison: deviance, AIC, dispersion
-## ------------------------------------------------------------
-
-cat("\n================ Deviance / dispersion comparison ================\n")
-comparison <- data.frame(
-  Model = c("Raw counts", "Proportions (unmerged)", "Proportions (merged)"),
-  Null_Deviance = c(model_raw$null.deviance, model_prop$null.deviance, model_merged$null.deviance),
-  Residual_Deviance = c(deviance(model_raw), deviance(model_prop), deviance(model_merged)),
-  Resid_df = c(df.residual(model_raw), df.residual(model_prop), df.residual(model_merged)),
-  AIC = c(AIC(model_raw), AIC(model_prop), AIC(model_merged)),
-  Dispersion_ratio = c(
-    deviance(model_raw) / df.residual(model_raw),
-    deviance(model_prop) / df.residual(model_prop),
-    deviance(model_merged) / df.residual(model_merged)
-  )
-)
-print(comparison)
-cat("\nNote: dispersion ratio well above 1 for all three models means\n")
-cat("standard errors and p-values are likely too optimistic regardless\n")
-cat("of which model you pick -- worth addressing with quasipoisson or\n")
-cat("negative binomial as a next step.\n")
-
-## ------------------------------------------------------------
-## 6. Coefficients as rate ratios PER 1 PERCENTAGE POINT
-##    (directly interpretable now -- no rescaling needed)
-## ------------------------------------------------------------
-
-cat("\n================ Proportions (unmerged) coefficients ================\n")
-prop_coefs <- data.frame(
-  term = names(coef(model_prop)),
-  estimate = coef(model_prop),
-  rate_ratio_per_1pp = exp(coef(model_prop))
-)
-print(prop_coefs, row.names = FALSE)
-
-cat("\n================ Proportions (merged) coefficients ================\n")
-merged_coefs <- data.frame(
-  term = names(coef(model_merged)),
-  estimate = coef(model_merged),
-  rate_ratio_per_1pp = exp(coef(model_merged))
-)
-print(merged_coefs, row.names = FALSE)
-```
-
